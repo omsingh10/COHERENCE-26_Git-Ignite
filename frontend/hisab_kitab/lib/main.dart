@@ -196,17 +196,11 @@ class _LoginScreenState extends State<LoginScreen> {
               // Logo row
               Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: C.orange,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Icon(
-                      Icons.account_balance,
-                      color: Colors.white,
-                      size: 22,
-                    ),
+                  Image.asset(
+                    'assets/logo.png',
+                    width: 42,
+                    height: 42,
+                    fit: BoxFit.contain,
                   ),
                   const SizedBox(width: 12),
                   const Text(
@@ -3098,24 +3092,26 @@ class _BudgetGptScreenState extends State<BudgetGptScreen> {
             'No response.';
         _history.add({'role': 'user', 'text': text});
         _history.add({'role': 'model', 'text': reply});
-        if (mounted)
+        if (mounted) {
           setState(() {
             _messages.add(_ChatMsg(text: reply, isUser: false));
             _thinking = false;
           });
+        }
       } else {
         final detail =
             (json.decode(res.body) as Map)['detail']?.toString() ?? res.body;
-        if (mounted)
+        if (mounted) {
           setState(() {
             _messages.add(
               _ChatMsg(text: 'Error: $detail', isUser: false, isError: true),
             );
             _thinking = false;
           });
+        }
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _messages.add(
             _ChatMsg(
@@ -3126,6 +3122,7 @@ class _BudgetGptScreenState extends State<BudgetGptScreen> {
           );
           _thinking = false;
         });
+      }
     }
     _scrollDown();
   }
