@@ -532,55 +532,117 @@ export const DistrictAnalyticsPage = ({ mockData }) => {
         )}
       </motion.div>
 
-      {/* Budget Allocation vs Spending Bar Chart */}
+      {/* Budget Allocation vs Spending — Horizontal Bar Chart */}
       <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-gray-100 p-6 card-lift">
-        <h2 className="text-base font-semibold text-gray-800 mb-5">Budget Allocation vs Spending</h2>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-semibold text-gray-800">Budget Allocation vs Spending</h2>
+          <div className="flex items-center gap-4 text-xs font-medium">
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-orange-400 inline-block" />Allocated</span>
+            <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-emerald-500 inline-block" />Spent</span>
+          </div>
+        </div>
         {loading ? (
-          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading...</div>
+          <div className="flex items-center justify-center h-64 text-gray-400 text-sm">Loading...</div>
         ) : deptData.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">No data for selected filters</div>
+          <div className="flex items-center justify-center h-64 text-gray-400 text-sm">No data for selected filters</div>
         ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <ReBarChart data={deptData} margin={{ top: 10, right: 20, left: 0, bottom: 30 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" interval={0} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <RechartsTooltip formatter={(v, n) => [`₹${Number(v).toFixed(1)} Cr`, n]} />
-              <Legend />
-              <Bar dataKey="Allocated" fill="#f97316" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Spent" fill="#22c55e" radius={[4, 4, 0, 0]} />
+          <ResponsiveContainer width="100%" height={Math.max(320, deptData.length * 44)}>
+            <ReBarChart
+              layout="vertical"
+              data={deptData}
+              margin={{ top: 4, right: 30, left: 8, bottom: 4 }}
+              barCategoryGap="28%"
+              barGap={3}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" horizontal={false} />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 11, fill: "#9ca3af" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) =>
+                  v >= 100000 ? `₹${(v / 100000).toFixed(0)}L` :
+                  v >= 1000   ? `₹${(v / 1000).toFixed(0)}K` : `₹${v}`
+                }
+              />
+              <YAxis
+                type="category"
+                dataKey="name"
+                width={190}
+                tick={{ fontSize: 11, fill: "#374151" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => v.replace(/ Department$/, "")}
+              />
+              <RechartsTooltip
+                contentStyle={{ background: "#fff", border: "1px solid #fed7aa", borderRadius: 10, fontSize: 12 }}
+                formatter={(v, n) => [
+                  v >= 100000 ? `₹${(v / 100000).toFixed(1)} L Cr` :
+                  v >= 1000   ? `₹${(v / 1000).toFixed(1)} K Cr` : `₹${Number(v).toFixed(1)} Cr`,
+                  n,
+                ]}
+                cursor={{ fill: "rgba(249,115,22,0.05)" }}
+              />
+              <Bar dataKey="Allocated" fill="#f97316" radius={[0, 4, 4, 0]} />
+              <Bar dataKey="Spent"     fill="#10b981" radius={[0, 4, 4, 0]} />
             </ReBarChart>
           </ResponsiveContainer>
         )}
       </motion.div>
 
-      {/* Monthly Spending Trend Area Chart */}
+      {/* Monthly Spending Trend */}
       <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-gray-100 p-6 card-lift">
-        <h2 className="text-base font-semibold text-gray-800 mb-5">Monthly Spending Trend</h2>
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-semibold text-gray-800">Monthly Spending Trend</h2>
+          <span className="flex items-center gap-1.5 text-xs font-medium text-orange-500">
+            <span className="w-3 h-1 rounded bg-orange-400 inline-block" />Spending
+          </span>
+        </div>
         {loading ? (
-          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading...</div>
+          <div className="flex items-center justify-center h-52 text-gray-400 text-sm">Loading...</div>
         ) : monthlyData.length === 0 ? (
-          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">No monthly data for selected filters</div>
+          <div className="flex items-center justify-center h-52 text-gray-400 text-sm">No monthly data for selected filters</div>
         ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={monthlyData} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={monthlyData} margin={{ top: 10, right: 24, left: 0, bottom: 0 }}>
               <defs>
                 <linearGradient id="distMonthGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
+                  <stop offset="5%"  stopColor="#f97316" stopOpacity={0.22} />
                   <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
-              <YAxis tick={{ fontSize: 11 }} />
-              <RechartsTooltip formatter={(v) => [`₹${Number(v).toFixed(1)} Cr`, "Spending"]} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis
+                dataKey="month"
+                tick={{ fontSize: 11, fill: "#9ca3af" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: "#9ca3af" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) =>
+                  v >= 100000 ? `${(v / 100000).toFixed(0)}L` :
+                  v >= 1000   ? `${(v / 1000).toFixed(0)}K` : v
+                }
+              />
+              <RechartsTooltip
+                contentStyle={{ background: "#fff", border: "1px solid #fed7aa", borderRadius: 10, fontSize: 12 }}
+                formatter={(v) => [
+                  v >= 100000 ? `₹${(v / 100000).toFixed(1)} L Cr` :
+                  v >= 1000   ? `₹${(v / 1000).toFixed(1)} K Cr` : `₹${Number(v).toFixed(1)} Cr`,
+                  "Spending",
+                ]}
+              />
               <Area
                 type="monotone"
                 dataKey="spending"
                 stroke="#f97316"
-                strokeWidth={2}
+                strokeWidth={2.5}
                 fill="url(#distMonthGrad)"
-                dot={{ r: 3, fill: "#f97316" }}
+                dot={{ r: 3.5, fill: "#f97316", strokeWidth: 0 }}
+                activeDot={{ r: 5.5, fill: "#ea580c" }}
               />
             </AreaChart>
           </ResponsiveContainer>
