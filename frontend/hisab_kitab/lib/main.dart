@@ -539,7 +539,7 @@ class _MainShellState extends State<MainShell> {
     ];
     const navItems = [
       _NavItem(Icons.dashboard_rounded, 'Dashboard'),
-      _NavItem(Icons.bar_chart_rounded, 'Analytics'),
+      _NavItem(Icons.bar_chart_rounded, 'Insights'),
       _NavItem(Icons.warning_amber_rounded, 'Anomalies'),
       _NavItem(Icons.auto_awesome_rounded, 'Budget AI'),
       _NavItem(Icons.person_rounded, 'Profile'),
@@ -1226,6 +1226,7 @@ class _DeptBarChart extends StatelessWidget {
 }
 
 // ============ ANALYTICS SCREEN ============
+// ============ ANALYTICS / INSIGHTS SCREEN ============
 class AnalyticsScreen extends StatefulWidget {
   final Map<String, String> headers;
   const AnalyticsScreen({super.key, required this.headers});
@@ -1233,111 +1234,119 @@ class AnalyticsScreen extends StatefulWidget {
   State<AnalyticsScreen> createState() => _AnalyticsScreenState();
 }
 
-class _AnalyticsScreenState extends State<AnalyticsScreen> {
+class _AnalyticsScreenState extends State<AnalyticsScreen>
+    with SingleTickerProviderStateMixin {
+  late TabController _tabCtrl;
   List<dynamic> states = [];
+  List<dynamic> fundLapse = [];
+  Map<String, dynamic> realloc = {
+    'surplus_depts': [],
+    'deficit_depts': [],
+    'suggestions': [],
+  };
   bool loading = true;
+
   @override
   void initState() {
     super.initState();
+    _tabCtrl = TabController(length: 3, vsync: this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _tabCtrl.dispose();
+    super.dispose();
   }
 
   Future<void> _load() async {
     try {
-      final r = await http.get(Uri.parse('$kBaseUrl/api/states-summary'));
-      if (r.statusCode == 200 && mounted) {
+      final results = await Future.wait([
+        http.get(Uri.parse('$kBaseUrl/api/states-summary')),
+        http.get(Uri.parse('$kBaseUrl/api/fund-lapse-risk')),
+        http.get(Uri.parse('$kBaseUrl/api/reallocation-suggestions')),
+      ]);
+      if (mounted) {
         setState(() {
-          states = json.decode(r.body) as List;
+          if (results[0].statusCode == 200) {
+            states = json.decode(results[0].body) as List;
+          }
+          if (results[1].statusCode == 200) {
+            fundLapse = json.decode(results[1].body) as List;
+          }
+          if (results[2].statusCode == 200) {
+            final d = json.decode(results[2].body);
+            if (d is Map<String, dynamic>) realloc = d;
+          }
           loading = false;
         });
-      } else if (mounted) {
-        setState(() => loading = false);
       }
     } catch (_) {
-      if (mounted) {
-        setState(() => loading = false);
-      }
+      if (mounted) setState(() => loading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final fmt = NumberFormat.compact(locale: 'en_IN');
     return Scaffold(
       backgroundColor: C.bg,
       appBar: AppBar(
-        title: const Text('Analytics'),
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: C.border),
+        title: const Text('Insights'),
+        bottom: TabBar(
+          controller: _tabCtrl,
+          labelColor: C.orange,
+          unselectedLabelColor: C.muted,
+          indicatorColor: C.orange,
+          indicatorSize: TabBarIndicatorSize.label,
+          labelStyle: const TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+          ),
+          tabs: const [
+            Tab(
+              icon: Icon(Icons.bar_chart_rounded, size: 18),
+              text: 'Utilization',
+            ),
+            Tab(
+              icon: Icon(Icons.warning_rounded, size: 18),
+              text: 'Fund Lapse',
+            ),
+            Tab(
+              icon: Icon(Icons.swap_horiz_rounded, size: 18),
+              text: 'Reallocation',
+            ),
+          ],
         ),
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator(color: C.orange))
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'State-wise Analysis',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.w700,
-                      color: C.dark,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'Spending efficiency across India',
-                    style: TextStyle(fontSize: 14, color: C.muted),
-                  ),
-                  const SizedBox(height: 20),
-
-                  wCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Utilization Distribution',
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight: FontWeight.w600,
-                            color: C.dark,
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        _UtilBar(data: states),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'States by Allocation',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: C.dark,
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  ...states.take(20).map((s) => _StateRow(state: s, fmt: fmt)),
-                  const SizedBox(height: 32),
-                ],
-              ),
+          : TabBarView(
+              controller: _tabCtrl,
+              children: [
+                _UtilizationTab(states: states),
+                _FundLapseTab(items: fundLapse),
+                _ReallocationTab(data: realloc),
+              ],
             ),
     );
   }
 }
 
-class _UtilBar extends StatelessWidget {
-  final List<dynamic> data;
-  const _UtilBar({required this.data});
+// ── Tab 1: Budget Utilization ─────────────────────────────────────────────────
+class _UtilizationTab extends StatelessWidget {
+  final List<dynamic> states;
+  const _UtilizationTab({required this.states});
+
   @override
   Widget build(BuildContext context) {
-    if (data.isEmpty) return const SizedBox(height: 40);
+    final fmt = NumberFormat.compact(locale: 'en_IN');
+    if (states.isEmpty) {
+      return const Center(
+        child: Text('No data', style: TextStyle(color: C.muted)),
+      );
+    }
     int high = 0, med = 0, low = 0;
-    for (final s in data) {
+    for (final s in states) {
       final u = (s['utilization'] as num).toDouble();
       if (u >= 80) {
         high++;
@@ -1347,29 +1356,71 @@ class _UtilBar extends StatelessWidget {
         low++;
       }
     }
-    final total = data.length;
-    return Column(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(6),
-          child: Row(
-            children: [
-              _seg(high / total, C.success),
-              _seg(med / total, C.amber),
-              _seg(low / total, C.danger),
-            ],
+    final total = states.length;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          wCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Distribution Overview',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: C.dark,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '$total states analysed',
+                  style: const TextStyle(fontSize: 12, color: C.muted),
+                ),
+                const SizedBox(height: 14),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: Row(
+                    children: [
+                      _seg(high / total, C.success),
+                      _seg(med / total, C.amber),
+                      _seg(low / total, C.danger),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _lgd(C.success, 'High ≥80%', high),
+                    _lgd(C.amber, 'Medium 50–79%', med),
+                    _lgd(C.danger, 'Low <50%', low),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _lgd(C.success, 'High (${high}s)'),
-            _lgd(C.amber, 'Medium (${med}s)'),
-            _lgd(C.danger, 'Low (${low}s)'),
-          ],
-        ),
-      ],
+          const SizedBox(height: 16),
+          const Text(
+            'Budget Utilization by State',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: C.dark,
+            ),
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Tap a state to see department-wise breakdown',
+            style: TextStyle(fontSize: 12, color: C.muted),
+          ),
+          const SizedBox(height: 12),
+          ...states.map((s) => _StateRow(state: s, fmt: fmt)),
+          const SizedBox(height: 24),
+        ],
+      ),
     );
   }
 
@@ -1377,21 +1428,32 @@ class _UtilBar extends StatelessWidget {
     flex: (frac * 100).toInt().clamp(1, 100),
     child: Container(height: 28, color: c),
   );
-  Widget _lgd(Color c, String l) => Row(
+
+  Widget _lgd(Color c, String label, int count) => Column(
     children: [
-      Container(
-        width: 10,
-        height: 10,
-        decoration: BoxDecoration(
-          color: c,
-          borderRadius: BorderRadius.circular(2),
-        ),
+      Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: c,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 4),
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: c,
+            ),
+          ),
+        ],
       ),
-      const SizedBox(width: 4),
-      Text(
-        l,
-        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-      ),
+      Text(label, style: const TextStyle(fontSize: 10, color: C.muted)),
     ],
   );
 }
@@ -1403,6 +1465,7 @@ class _StateRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final util = (state['utilization'] as num).toDouble();
+    final allocated = (state['allocated'] as num).toDouble();
     final color = util >= 80
         ? C.success
         : util >= 50
@@ -1419,55 +1482,53 @@ class _StateRow extends StatelessWidget {
           ),
         ),
         child: wCard(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          child: Row(
+          padding: const EdgeInsets.all(14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      state['State'],
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                        color: C.dark,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    state['State'] ?? '',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: C.dark,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      '${util.toStringAsFixed(1)}%',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: color,
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${chr(8377)}${fmt.format((state["allocated"] as num).toDouble())} Cr allocated',
-                      style: const TextStyle(fontSize: 12, color: C.muted),
-                    ),
-                    const SizedBox(height: 6),
-                    LinearProgressIndicator(
-                      value: (util / 100).clamp(0.0, 1.5),
-                      color: color,
-                      backgroundColor: color.withValues(alpha: 0.15),
-                      minHeight: 6,
-                      borderRadius: BorderRadius.circular(3),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: color.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${util.toStringAsFixed(1)}%',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: color,
                   ),
-                ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                '${String.fromCharCode(8377)}${fmt.format(allocated)} Cr allocated',
+                style: const TextStyle(fontSize: 12, color: C.muted),
+              ),
+              const SizedBox(height: 8),
+              LinearProgressIndicator(
+                value: (util / 100).clamp(0.0, 1.0),
+                color: color,
+                backgroundColor: color.withValues(alpha: 0.15),
+                minHeight: 7,
+                borderRadius: BorderRadius.circular(4),
               ),
             ],
           ),
@@ -1475,8 +1536,572 @@ class _StateRow extends StatelessWidget {
       ),
     );
   }
+}
 
-  static String chr(int code) => String.fromCharCode(code);
+// ── Tab 2: Fund Lapse Risk ────────────────────────────────────────────────────
+class _FundLapseTab extends StatelessWidget {
+  final List<dynamic> items;
+  const _FundLapseTab({required this.items});
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = NumberFormat.compact(locale: 'en_IN');
+    if (items.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.check_circle_outline, color: C.success, size: 48),
+            SizedBox(height: 12),
+            Text(
+              'No fund lapse risk detected!',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: C.success,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+    final high = items.where((i) => i['risk'] == 'HIGH').length;
+    final med = items.where((i) => i['risk'] == 'MEDIUM').length;
+    final low = items.where((i) => i['risk'] == 'LOW').length;
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          wCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '⚠️ Fund Lapse Risk',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: C.dark,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Departments spending less than 50% of allocation — at risk of returning unspent funds',
+                  style: TextStyle(fontSize: 12, color: C.muted),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    _riskStat('HIGH', high, C.danger),
+                    const SizedBox(width: 12),
+                    _riskStat('MEDIUM', med, C.amber),
+                    const SizedBox(width: 12),
+                    _riskStat('LOW', low, C.blue),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          ...items.map((item) {
+            final risk = item['risk'] as String;
+            final riskColor = risk == 'HIGH'
+                ? C.danger
+                : risk == 'MEDIUM'
+                ? C.amber
+                : C.blue;
+            final util = (item['utilization'] as num).toDouble();
+            final unspent = (item['unspent'] as num).toDouble();
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: wCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                item['department'] ?? '',
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: C.dark,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                item['state'] ?? '',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: C.muted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: riskColor.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            risk,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: riskColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _statCol(
+                            'Utilization',
+                            '${util.toStringAsFixed(1)}%',
+                            riskColor,
+                          ),
+                        ),
+                        Expanded(
+                          child: _statCol(
+                            'Unspent',
+                            '${String.fromCharCode(8377)}${fmt.format(unspent)} Cr',
+                            C.danger,
+                          ),
+                        ),
+                        Expanded(
+                          child: _statCol(
+                            'Allocated',
+                            '${String.fromCharCode(8377)}${fmt.format((item['allocated'] as num).toDouble())} Cr',
+                            C.muted,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    LinearProgressIndicator(
+                      value: (util / 100).clamp(0.0, 1.0),
+                      color: riskColor,
+                      backgroundColor: riskColor.withValues(alpha: 0.12),
+                      minHeight: 6,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _riskStat(String label, int count, Color c) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          Text(
+            '$count',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: c,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: c,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _statCol(String label, String value, Color c) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(label, style: const TextStyle(fontSize: 10, color: C.muted)),
+      const SizedBox(height: 2),
+      Text(
+        value,
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c),
+      ),
+    ],
+  );
+}
+
+// ── Tab 3: Reallocation Suggestions ──────────────────────────────────────────
+class _ReallocationTab extends StatelessWidget {
+  final Map<String, dynamic> data;
+  const _ReallocationTab({required this.data});
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = NumberFormat.compact(locale: 'en_IN');
+    final suggestions = (data['suggestions'] as List?) ?? [];
+    final surplus = (data['surplus_depts'] as List?) ?? [];
+    final deficit = (data['deficit_depts'] as List?) ?? [];
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header card
+          wCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '🔄 Smart Reallocation',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: C.dark,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Move unspent funds from surplus departments to over-stretched ones.',
+                  style: TextStyle(fontSize: 12, color: C.muted),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    _pillStat('${surplus.length}', 'Surplus Depts', C.success),
+                    const SizedBox(width: 12),
+                    _pillStat('${deficit.length}', 'Deficit Depts', C.danger),
+                    const SizedBox(width: 12),
+                    _pillStat('${suggestions.length}', 'Suggestions', C.orange),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // Suggestion arrows
+          if (suggestions.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            const Text(
+              'Reallocation Suggestions',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: C.dark,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ...suggestions.map((s) {
+              final amount = (s['suggested_cr'] as num).toDouble();
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: wCard(
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _locationBox(
+                              s['from_dept'] ?? '',
+                              s['from_state'] ?? '',
+                              '${(s['from_utilization'] as num).toDouble().toStringAsFixed(1)}%',
+                              C.success,
+                              'Surplus',
+                            ),
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            child: Column(
+                              children: [
+                                const Icon(
+                                  Icons.arrow_forward_rounded,
+                                  color: C.orange,
+                                  size: 22,
+                                ),
+                                const SizedBox(height: 4),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 3,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: C.orangeLight,
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    '${String.fromCharCode(8377)}${fmt.format(amount)} Cr',
+                                    style: const TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700,
+                                      color: C.orange,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            child: _locationBox(
+                              s['to_dept'] ?? '',
+                              s['to_state'] ?? '',
+                              '${(s['to_utilization'] as num).toDouble().toStringAsFixed(1)}%',
+                              C.danger,
+                              'Deficit',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            }),
+          ],
+
+          // Surplus table
+          if (surplus.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _sectionHeader(
+              Icons.trending_down_rounded,
+              'Surplus Departments',
+              'Underutilized — less than 40% spent',
+              C.success,
+            ),
+            const SizedBox(height: 10),
+            ...surplus.map(
+              (s) => _deptRow(
+                s['dept'] ?? '',
+                s['state'] ?? '',
+                (s['utilization'] as num).toDouble(),
+                (s['surplus'] as num).toDouble(),
+                'Surplus',
+                C.success,
+                fmt,
+              ),
+            ),
+          ],
+
+          // Deficit table
+          if (deficit.isNotEmpty) ...[
+            const SizedBox(height: 20),
+            _sectionHeader(
+              Icons.trending_up_rounded,
+              'High-Demand Departments',
+              'Over 110% utilization — needs more funds',
+              C.danger,
+            ),
+            const SizedBox(height: 10),
+            ...deficit.map(
+              (s) => _deptRow(
+                s['dept'] ?? '',
+                s['state'] ?? '',
+                (s['utilization'] as num).toDouble(),
+                (s['deficit'] as num).toDouble(),
+                'Deficit',
+                C.danger,
+                fmt,
+              ),
+            ),
+          ],
+
+          const SizedBox(height: 24),
+        ],
+      ),
+    );
+  }
+
+  Widget _pillStat(String count, String label, Color c) => Expanded(
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      decoration: BoxDecoration(
+        color: c.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        children: [
+          Text(
+            count,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
+              color: c,
+            ),
+          ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: c,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    ),
+  );
+
+  Widget _locationBox(
+    String dept,
+    String state,
+    String util,
+    Color c,
+    String tag,
+  ) => Container(
+    padding: const EdgeInsets.all(10),
+    decoration: BoxDecoration(
+      color: c.withValues(alpha: 0.07),
+      borderRadius: BorderRadius.circular(10),
+      border: Border.all(color: c.withValues(alpha: 0.25)),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+          decoration: BoxDecoration(
+            color: c.withValues(alpha: 0.15),
+            borderRadius: BorderRadius.circular(4),
+          ),
+          child: Text(
+            tag,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: c,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          dept,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: C.dark,
+          ),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        const SizedBox(height: 2),
+        Text(state, style: const TextStyle(fontSize: 10, color: C.muted)),
+        const SizedBox(height: 4),
+        Text(
+          util,
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: c),
+        ),
+      ],
+    ),
+  );
+
+  Widget _sectionHeader(IconData icon, String title, String sub, Color c) =>
+      Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: c.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: c, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                    color: C.dark,
+                  ),
+                ),
+                Text(sub, style: const TextStyle(fontSize: 11, color: C.muted)),
+              ],
+            ),
+          ),
+        ],
+      );
+
+  Widget _deptRow(
+    String dept,
+    String state,
+    double util,
+    double amount,
+    String tag,
+    Color c,
+    NumberFormat fmt,
+  ) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: wCard(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  dept,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: C.dark,
+                  ),
+                ),
+                Text(
+                  state,
+                  style: const TextStyle(fontSize: 11, color: C.muted),
+                ),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '${util.toStringAsFixed(1)}%',
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: c,
+                ),
+              ),
+              Text(
+                '${String.fromCharCode(8377)}${fmt.format(amount)} Cr',
+                style: TextStyle(fontSize: 11, color: c),
+              ),
+            ],
+          ),
+        ],
+      ),
+    ),
+  );
 }
 
 // ============ STATE DETAIL ============

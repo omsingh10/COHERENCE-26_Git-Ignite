@@ -1461,6 +1461,110 @@ Key Stats:
 Your role: Help users understand budget allocation, spending patterns, anomalies, fund utilization, and fiscal efficiency.
 Answer clearly and concisely. Use Rs for currency. Keep responses under 300 words unless detail is requested."""
 
+# ── PUBLIC INSIGHTS ENDPOINTS (no auth required) ──────────────────────────────
+
+@app.get("/api/fund-lapse-risk")
+async def fund_lapse_risk(threshold: float = 77):
+    """Departments/states at risk of fund lapse (below-average utilization). No auth required."""
+    conn = sqlite3.connect(DB_PATH)
+    # Auto-compute dataset median so threshold is always relative
+    median_util = pd.read_sql_query(
+        "SELECT AVG(Utilization_Percentage) FROM budget", conn
+    ).iloc[0, 0] or 77.0
+    effective_threshold = min(threshold, float(median_util))
+    df = pd.read_sql_query("""
+        SELECT
+            State,
+            Department,
+            SUM(Allocated_Budget_Cr)    AS allocated,
+            SUM(Actual_Spending_Cr)     AS spent,
+            AVG(Utilization_Percentage) AS utilization,
+            SUM(Remaining_Budget_Cr)    AS unspent
+        FROM budget
+        GROUP BY State, Department
+        HAVING utilization < ?
+        ORDER BY unspent DESC
+        LIMIT 30
+    """, conn, params=[effective_threshold])
+    conn.close()
+    result = []
+    low_cut = effective_threshold * 0.97
+    mid_cut = effective_threshold * 0.99
+    for _, row in df.iterrows():
+        u = float(row['utilization'])
+        result.append({
+            "state":        row['State'],
+            "department":   row['Department'],
+            "allocated":    round(float(row['allocated']), 2),
+            "spent":        round(float(row['spent']), 2),
+            "utilization":  round(u, 1),
+            "unspent":      round(float(row['unspent']), 2),
+            "risk":         "HIGH" if u < low_cut else "MEDIUM" if u < mid_cut else "LOW",
+        })
+    return result
+
+
+@app.get("/api/reallocation-suggestions")
+async def reallocation_suggestions():
+    """Surplus vs deficit department pairs for fund reallocation. No auth required."""
+    conn = sqlite3.connect(DB_PATH)
+    avg_util = float(
+        pd.read_sql_query("SELECT AVG(Utilization_Percentage) FROM budget", conn).iloc[0, 0] or 77.0
+    )
+    surplus_threshold = avg_util - 1.5   # below average
+    deficit_threshold = avg_util + 1.5   # above average
+    surplus_df = pd.read_sql_query("""
+        SELECT
+            State, Department,
+            SUM(Allocated_Budget_Cr)    AS allocated,
+            AVG(Utilization_Percentage) AS utilization,
+            SUM(Remaining_Budget_Cr)    AS surplus
+        FROM budget
+        GROUP BY State, Department
+        HAVING utilization < ?
+        ORDER BY surplus DESC
+        LIMIT 15
+    """, conn, params=[surplus_threshold])
+    deficit_df = pd.read_sql_query("""
+        SELECT
+            State, Department,
+            SUM(Allocated_Budget_Cr)   AS allocated,
+            AVG(Utilization_Percentage) AS utilization,
+            (SUM(Actual_Spending_Cr) - SUM(Allocated_Budget_Cr)) AS deficit
+        FROM budget
+        GROUP BY State, Department
+        HAVING utilization > ?
+        ORDER BY deficit DESC
+        LIMIT 15
+    """, conn, params=[deficit_threshold])
+    conn.close()
+    suggestions = []
+    for i in range(min(len(surplus_df), len(deficit_df))):
+        s = surplus_df.iloc[i]
+        d = deficit_df.iloc[i]
+        amount = round(float(s['surplus']) * 0.6, 2)
+        suggestions.append({
+            "from_state":       s['State'],
+            "from_dept":        s['Department'],
+            "from_utilization": round(float(s['utilization']), 1),
+            "to_state":         d['State'],
+            "to_dept":          d['Department'],
+            "to_utilization":   round(float(d['utilization']), 1),
+            "suggested_cr":     amount,
+        })
+    return {
+        "surplus_depts":  [{"state": r['State'], "dept": r['Department'],
+                            "utilization": round(float(r['utilization']), 1),
+                            "surplus": round(float(r['surplus']), 2)}
+                           for _, r in surplus_df.iterrows()],
+        "deficit_depts":  [{"state": r['State'], "dept": r['Department'],
+                            "utilization": round(float(r['utilization']), 1),
+                            "deficit": round(float(r['deficit']), 2)}
+                           for _, r in deficit_df.iterrows()],
+        "suggestions":    suggestions,
+    }
+
+
 @app.post("/api/chat")
 async def budget_chat(req: ChatRequest):
     if not _genai_client:
