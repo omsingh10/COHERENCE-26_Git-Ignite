@@ -88,11 +88,14 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final response = await http.post(
-        Uri.parse('$baseUrl/token'),
-        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'username=${Uri.encodeComponent(username)}&password=${Uri.encodeComponent(password)}',
-      ).timeout(Duration(seconds: 10));
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/token'),
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body:
+                'username=${Uri.encodeComponent(username)}&password=${Uri.encodeComponent(password)}',
+          )
+          .timeout(Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -136,7 +139,10 @@ class _LoginScreenState extends State<LoginScreen> {
         setState(() => _error = 'Server error (${response.statusCode})');
       }
     } catch (e) {
-      setState(() => _error = 'Cannot connect to server.\nCheck if backend is running at $baseUrl');
+      setState(
+        () => _error =
+            'Cannot connect to server.\nCheck if backend is running at $baseUrl',
+      );
     } finally {
       setState(() => _isLoading = false);
     }
@@ -167,7 +173,9 @@ class _LoginScreenState extends State<LoginScreen> {
                 decoration: InputDecoration(
                   labelText: 'Username',
                   prefixIcon: Icon(Icons.person),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 textInputAction: TextInputAction.next,
               ),
@@ -179,10 +187,17 @@ class _LoginScreenState extends State<LoginScreen> {
                   labelText: 'Password',
                   prefixIcon: Icon(Icons.lock),
                   suffixIcon: IconButton(
-                    icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                    icon: Icon(
+                      _obscurePassword
+                          ? Icons.visibility_off
+                          : Icons.visibility,
+                    ),
+                    onPressed: () =>
+                        setState(() => _obscurePassword = !_obscurePassword),
                   ),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                 ),
                 onSubmitted: (_) => _login(),
               ),
@@ -195,10 +210,19 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue[700],
                     foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
                   child: _isLoading
-                      ? SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
                       : Text('Login', style: TextStyle(fontSize: 16)),
                 ),
               ),
@@ -214,7 +238,12 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       Icon(Icons.error, color: Colors.red[200], size: 20),
                       SizedBox(width: 8),
-                      Expanded(child: Text(_error!, style: TextStyle(color: Colors.red[200]))),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: TextStyle(color: Colors.red[200]),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -230,14 +259,35 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Demo Accounts', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blue[200])),
+                    Text(
+                      'Demo Accounts',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue[200],
+                      ),
+                    ),
                     SizedBox(height: 8),
-                    _demoAccount('admin', 'Full access', Icons.admin_panel_settings),
-                    _demoAccount('health_dept', 'Health dept only', Icons.local_hospital),
-                    _demoAccount('education_dept', 'Education dept only', Icons.school),
+                    _demoAccount(
+                      'admin',
+                      'Full access',
+                      Icons.admin_panel_settings,
+                    ),
+                    _demoAccount(
+                      'health_dept',
+                      'Health dept only',
+                      Icons.local_hospital,
+                    ),
+                    _demoAccount(
+                      'education_dept',
+                      'Education dept only',
+                      Icons.school,
+                    ),
                     _demoAccount('public_user', 'Read-only', Icons.people),
                     SizedBox(height: 4),
-                    Text('Password: admin123', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    Text(
+                      'Password: admin123',
+                      style: TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
                   ],
                 ),
               ),
@@ -260,7 +310,10 @@ class _LoginScreenState extends State<LoginScreen> {
           children: [
             Icon(icon, size: 16, color: Colors.blue[300]),
             SizedBox(width: 8),
-            Text(username, style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13)),
+            Text(
+              username,
+              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 13),
+            ),
             SizedBox(width: 6),
             Text('- $desc', style: TextStyle(fontSize: 11, color: Colors.grey)),
           ],
@@ -400,7 +453,13 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       setState(() {
-        departments = ['Health', 'Education', 'Rural Development', 'Agriculture', 'Infrastructure'];
+        departments = [
+          'Health',
+          'Education',
+          'Rural Development',
+          'Agriculture',
+          'Infrastructure',
+        ];
         selectedDept = departments[0];
       });
     }
@@ -506,7 +565,11 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.red[700],
         behavior: SnackBarBehavior.floating,
         action: message.contains('expired')
-            ? SnackBarAction(label: 'LOGIN', textColor: Colors.white, onPressed: _logout)
+            ? SnackBarAction(
+                label: 'LOGIN',
+                textColor: Colors.white,
+                onPressed: _logout,
+              )
             : null,
       ),
     );
@@ -528,7 +591,10 @@ class _HomeScreenState extends State<HomeScreen> {
               backgroundColor: _roleColor(userRole),
               child: Text(
                 fullName.isNotEmpty ? fullName[0].toUpperCase() : 'U',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ),
             itemBuilder: (context) => [
@@ -537,8 +603,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(fullName, style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text('@$username', style: TextStyle(fontSize: 12, color: Colors.grey)),
+                    Text(
+                      fullName,
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    Text(
+                      '@$username',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
                     SizedBox(height: 4),
                     Container(
                       padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -560,7 +632,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               PopupMenuDivider(),
               PopupMenuItem(
-                child: Row(children: [Icon(Icons.logout, size: 18), SizedBox(width: 8), Text('Logout')]),
+                child: Row(
+                  children: [
+                    Icon(Icons.logout, size: 18),
+                    SizedBox(width: 8),
+                    Text('Logout'),
+                  ],
+                ),
                 onTap: _logout,
               ),
             ],
@@ -655,10 +733,26 @@ class _HomeScreenState extends State<HomeScreen> {
                 crossAxisSpacing: 10,
                 mainAxisSpacing: 10,
                 children: [
-                  _buildStatCard('States', summary?['total_states']?.toString() ?? '0', Icons.map),
-                  _buildStatCard('Districts', summary?['total_districts']?.toString() ?? '0', Icons.location_city),
-                  _buildStatCard('Ministries', summary?['total_ministries']?.toString() ?? '0', Icons.account_balance),
-                  _buildStatCard('Departments', summary?['total_departments']?.toString() ?? '0', Icons.business),
+                  _buildStatCard(
+                    'States',
+                    summary?['total_states']?.toString() ?? '0',
+                    Icons.map,
+                  ),
+                  _buildStatCard(
+                    'Districts',
+                    summary?['total_districts']?.toString() ?? '0',
+                    Icons.location_city,
+                  ),
+                  _buildStatCard(
+                    'Ministries',
+                    summary?['total_ministries']?.toString() ?? '0',
+                    Icons.account_balance,
+                  ),
+                  _buildStatCard(
+                    'Departments',
+                    summary?['total_departments']?.toString() ?? '0',
+                    Icons.business,
+                  ),
                 ],
               ),
 
@@ -709,19 +803,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (anomalies.isNotEmpty) ...[
                   Text(
                     'ANOMALIES DETECTED',
-                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 8),
-                  ...anomalies.take(5).map(
-                    (a) => Card(
-                      color: Colors.red[900],
-                      child: ListTile(
-                        title: Text('${a['State']} - ${a['District']}'),
-                        subtitle: Text('${a['Department']}: ${a['Scheme_Name']}'),
-                        trailing: Text('${a['Utilization_Percentage']?.toStringAsFixed(1)}%'),
-                      ),
+                    style: TextStyle(
+                      color: Colors.red,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                  SizedBox(height: 8),
+                  ...anomalies
+                      .take(5)
+                      .map(
+                        (a) => Card(
+                          color: Colors.red[900],
+                          child: ListTile(
+                            title: Text('${a['State']} - ${a['District']}'),
+                            subtitle: Text(
+                              '${a['Department']}: ${a['Scheme_Name']}',
+                            ),
+                            trailing: Text(
+                              '${a['Utilization_Percentage']?.toStringAsFixed(1)}%',
+                            ),
+                          ),
+                        ),
+                      ),
                   if (anomalies.length > 5)
                     Text('+ ${anomalies.length - 5} more...'),
                 ],
@@ -730,19 +833,28 @@ class _HomeScreenState extends State<HomeScreen> {
                   SizedBox(height: 16),
                   Text(
                     'POTENTIAL LEAKAGES',
-                    style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 8),
-                  ...leakage.take(5).map(
-                    (l) => Card(
-                      color: Colors.orange[900],
-                      child: ListTile(
-                        title: Text('${l['State']} - ${l['District']}'),
-                        subtitle: Text('${l['Department']}: ${l['Scheme_Name']}'),
-                        trailing: Text('₹${format.format(l['unspent_amount'])}Cr'),
-                      ),
+                    style: TextStyle(
+                      color: Colors.orange,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                  SizedBox(height: 8),
+                  ...leakage
+                      .take(5)
+                      .map(
+                        (l) => Card(
+                          color: Colors.orange[900],
+                          child: ListTile(
+                            title: Text('${l['State']} - ${l['District']}'),
+                            subtitle: Text(
+                              '${l['Department']}: ${l['Scheme_Name']}',
+                            ),
+                            trailing: Text(
+                              '₹${format.format(l['unspent_amount'])}Cr',
+                            ),
+                          ),
+                        ),
+                      ),
                 ],
 
                 if (reallocation.containsKey('suggestions') &&
@@ -750,38 +862,54 @@ class _HomeScreenState extends State<HomeScreen> {
                   SizedBox(height: 16),
                   Text(
                     'REALLOCATION SUGGESTIONS',
-                    style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.green,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   SizedBox(height: 8),
-                  ...reallocation['suggestions'].map(
-                    (s) => Card(
-                      color: Colors.green[900],
-                      child: ListTile(
-                        title: Text(s['reason']),
-                        subtitle: Text('${s['from_location']} → ${s['to_location']}'),
-                        trailing: Text('₹${s['suggested_amount_cr']}Cr'),
-                      ),
-                    ),
-                  ).toList(),
+                  ...reallocation['suggestions']
+                      .map(
+                        (s) => Card(
+                          color: Colors.green[900],
+                          child: ListTile(
+                            title: Text(s['reason']),
+                            subtitle: Text(
+                              '${s['from_location']} → ${s['to_location']}',
+                            ),
+                            trailing: Text('₹${s['suggested_amount_cr']}Cr'),
+                          ),
+                        ),
+                      )
+                      .toList(),
                 ],
 
                 if (highRisk.isNotEmpty) ...[
                   SizedBox(height: 16),
                   Text(
                     'HIGH RISK PROJECTS',
-                    style: TextStyle(color: Colors.purple, fontWeight: FontWeight.bold),
-                  ),
-                  SizedBox(height: 8),
-                  ...highRisk.take(5).map(
-                    (r) => Card(
-                      color: Colors.purple[900],
-                      child: ListTile(
-                        title: Text('${r['State']} - ${r['District']}'),
-                        subtitle: Text('${r['Scheme_Name']} | Delay: ${r['Delay_Days']} days'),
-                        trailing: Text('${r['Utilization_Percentage']?.toStringAsFixed(1)}%'),
-                      ),
+                    style: TextStyle(
+                      color: Colors.purple,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                  SizedBox(height: 8),
+                  ...highRisk
+                      .take(5)
+                      .map(
+                        (r) => Card(
+                          color: Colors.purple[900],
+                          child: ListTile(
+                            title: Text('${r['State']} - ${r['District']}'),
+                            subtitle: Text(
+                              '${r['Scheme_Name']} | Delay: ${r['Delay_Days']} days',
+                            ),
+                            trailing: Text(
+                              '${r['Utilization_Percentage']?.toStringAsFixed(1)}%',
+                            ),
+                          ),
+                        ),
+                      ),
                 ],
               ],
             ],
@@ -804,9 +932,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Color _roleColor(String role) {
     switch (role) {
-      case 'admin': return Colors.red;
-      case 'department': return Colors.blue;
-      default: return Colors.grey;
+      case 'admin':
+        return Colors.red;
+      case 'department':
+        return Colors.blue;
+      default:
+        return Colors.grey;
     }
   }
 
@@ -839,7 +970,12 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildSummaryItem(String label, String value, IconData icon, Color color) {
+  Widget _buildSummaryItem(
+    String label,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Column(
       children: [
         Icon(icon, color: color),
@@ -862,7 +998,10 @@ class _HomeScreenState extends State<HomeScreen> {
             SizedBox(height: 2),
             FittedBox(
               fit: BoxFit.scaleDown,
-              child: Text(value, style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold)),
+              child: Text(
+                value,
+                style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              ),
             ),
             Text(
               label,
