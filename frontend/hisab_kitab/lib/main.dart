@@ -7,7 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
 
-const String kBaseUrl = 'http://192.168.22.222:8000';
+const String kBaseUrl = 'http://192.168.137.1:8000';
 
 // ============ COLORS ============
 class C {
