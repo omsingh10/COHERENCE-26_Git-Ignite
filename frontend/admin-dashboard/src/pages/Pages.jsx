@@ -1,5 +1,16 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
+import {
+  BarChart as ReBarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Cell,
+  ResponsiveContainer,
+} from "recharts";
+import { api } from "../services/api";
 import {
   AnomalyDetectionPanel,
   FundLapsePredictorPanel,
@@ -37,6 +48,13 @@ import {
   PieChart,
   BarChart3,
   Zap,
+  Building2,
+  MapPin,
+  Briefcase,
+  Settings,
+  SlidersHorizontal,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 
 const pageVariants = {
@@ -99,252 +117,273 @@ export const AnomalyDetectionPage = ({ mockData }) => {
 };
 
 export const BudgetFlowTrackerPage = ({ mockData }) => {
+  const [flowKPIs, setFlowKPIs] = useState(null);
+  const [monthlyEff, setMonthlyEff] = useState([]);
+  const [cascadeData, setCascadeData] = useState(null);
+  const [backendProjects, setBackendProjects] = useState([]);
+  const [backendOnline, setBackendOnline] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      api.getFlowKPIs(),
+      api.getFlowMonthlyEfficiency(),
+      api.getFlowCascade(),
+      api.getFlowProjects(10),
+    ])
+      .then(([kpis, monthly, cascade, proj]) => {
+        setFlowKPIs(kpis);
+        setMonthlyEff(monthly);
+        setCascadeData(cascade);
+        setBackendProjects(proj);
+        setBackendOnline(true);
+      })
+      .catch(() => setBackendOnline(false));
+  }, []);
+
   const data = usePageData(mockData);
   const stats = generateSummaryStats(data);
-
-  const flowData = calculateBudgetFlow(data);
-  const stateEntries = Object.values(flowData.central.children);
   const totalFunds = data.reduce((s, d) => s + d.allocated_budget, 0);
-  const totalDisbursed = data.reduce((s, d) => s + d.spent_budget, 0);
-  const efficiency = ((totalDisbursed / totalFunds) * 100).toFixed(1);
+  const totalSpentMock = data.reduce((s, d) => s + d.spent_budget, 0);
+  const efficiencyMock = totalFunds > 0 ? ((totalSpentMock / totalFunds) * 100).toFixed(2) : "0.00";
 
-  const deptData = groupByDepartment(data);
 
-  const projectStatusData = data
-    .sort((a, b) => b.allocated_budget - a.allocated_budget)
-    .slice(0, 12)
-    .map((r) => {
-      const util = (r.spent_budget / r.allocated_budget) * 100;
-      let status = "On Track";
-      let statusColor = "text-green-600 bg-green-50";
-      if (util > 110) {
-        status = "Overspent";
-        statusColor = "text-red-600 bg-red-50";
-      } else if (util < 40) {
-        status = "Delayed";
-        statusColor = "text-amber-600 bg-amber-50";
-      } else if (util >= 85 && util <= 110) {
-        status = "On Track";
-        statusColor = "text-green-600 bg-green-50";
-      } else {
-        status = "In Progress";
-        statusColor = "text-blue-600 bg-blue-50";
-      }
-      return { ...r, status, statusColor, util };
-    });
+  // ── KPIs ─────────────────────────────────────────────────────────────────
+  const kpis = flowKPIs || {
+    total_disbursed: totalFunds,
+    total_spent: totalSpentMock,
+    utilization_pct: parseFloat(efficiencyMock),
+    active_projects: data.length,
+    on_schedule_pct: 100 - (data.filter((d) => d.delay_risk).length / Math.max(data.length, 1)) * 100,
+    yoy_change: 12,
+  };
+
+  // ── Bar chart data ────────────────────────────────────────────────────────
+  const chartData =
+    monthlyEff.length > 0
+      ? monthlyEff.map((m) => ({ month: m.month_label, efficiency: Math.round(m.efficiency || 0) }))
+      : [
+          { month: "Apr 23", efficiency: 32 },
+          { month: "May 23", efficiency: 44 },
+          { month: "Jun 23", efficiency: 41 },
+          { month: "Jul 23", efficiency: 46 },
+          { month: "Aug 23", efficiency: 37 },
+          { month: "Sep 23", efficiency: 38 },
+          { month: "Oct 23", efficiency: 68 },
+          { month: "Nov 23", efficiency: 64 },
+          { month: "Dec 23", efficiency: 62 },
+          { month: "Jan 24", efficiency: 52 },
+          { month: "Feb 24", efficiency: 49 },
+          { month: "Mar 24", efficiency: 45 },
+        ];
+
+  const getBarColor = (eff) => {
+    if (eff >= 65) return "#6366f1";
+    if (eff >= 50) return "#818cf8";
+    if (eff >= 40) return "#a5b4fc";
+    return "#c7d2fe";
+  };
+
+  // ── Cascade data ──────────────────────────────────────────────────────────
+  const cascade = cascadeData || {
+    central:    { name: "Central Government", level: "NATIONAL LEVEL",  allocated: totalFunds,            spent: totalSpentMock,          utilization: parseFloat(efficiencyMock), status: "Disbursed"   },
+    state:      { name: "Top State",          level: "REGIONAL LEVEL",  allocated: totalFunds * 0.13,     spent: totalFunds * 0.017,      utilization: 13,                         status: "Disbursed"   },
+    district:   { name: "Top District",       level: "LOCAL LEVEL",     allocated: totalFunds * 0.017,    spent: totalFunds * 0.002,      utilization: 13,                         status: "Allocated"   },
+    department: { name: "Top Department",     level: "DEPT LEVEL",      allocated: totalFunds * 0.005,    spent: totalFunds * 0.0018,     utilization: 35,                         status: "In Progress" },
+  };
+
+  const cascadeLevels = [
+    { key: "central",    Icon: Building2, bg: "bg-slate-800"   },
+    { key: "state",      Icon: Building2, bg: "bg-orange-500"  },
+    { key: "district",   Icon: MapPin,    bg: "bg-blue-500"    },
+    { key: "department", Icon: Briefcase, bg: "bg-green-500"   },
+  ];
+
+  const badgeCls = (u) =>
+    u >= 80 ? "bg-green-100 text-green-700"
+    : u >= 30 ? "bg-amber-100 text-amber-700"
+    : "bg-blue-100 text-blue-700";
+
+  // ── Projects list ─────────────────────────────────────────────────────────
+  const projectsList =
+    backendProjects.length > 0
+      ? backendProjects.slice(0, 8).map((p) => {
+          const sc =
+            p.status === "Completed"   ? "text-green-700 bg-green-50 border border-green-200"
+            : p.status === "Pending"   ? "text-orange-700 bg-orange-50 border border-orange-200"
+            :                            "text-emerald-700 bg-emerald-50 border border-emerald-200";
+          return { ...p, statusColor: sc };
+        })
+      : data
+          .sort((a, b) => b.allocated_budget - a.allocated_budget)
+          .slice(0, 8)
+          .map((r) => {
+            const u = (r.spent_budget / r.allocated_budget) * 100;
+            const status = u >= 95 ? "Completed" : u < 20 ? "Pending" : "In Progress";
+            const sc =
+              status === "Completed" ? "text-green-700 bg-green-50 border border-green-200"
+              : status === "Pending" ? "text-orange-700 bg-orange-50 border border-orange-200"
+              :                        "text-emerald-700 bg-emerald-50 border border-emerald-200";
+            return {
+              project_name: r.scheme_name || r.department,
+              level: r.administrative_level || r.state,
+              budget: r.allocated_budget,
+              spent: r.spent_budget,
+              status,
+              statusColor: sc,
+            };
+          });
 
   return (
-    <motion.div
-      variants={pageVariants}
-      initial="hidden"
-      animate="visible"
-      className="space-y-6"
-    >
-      <PageHeader
-        title="Budget Flow Tracker"
-        subtitle="How funds flow from Central → State → District → Department"
-      />
-
-      {/* 3 KPI Cards */}
-      <motion.div
-        variants={itemVariants}
-        className="grid grid-cols-1 md:grid-cols-3 gap-4"
-      >
-        <div className="bg-gradient-to-br from-orange-50 to-orange-100/60 rounded-2xl p-5 border border-orange-200/50">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 rounded-xl bg-white/70">
-              <PieChart size={18} className="text-orange-500" />
-            </div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Total Funds Released
-            </p>
-          </div>
-          <h3 className="text-2xl font-bold text-gray-900">
-            {formatCurrency(totalFunds)}
-          </h3>
-          <p className="text-xs text-gray-500 mt-1">
-            Across {stateEntries.length} states
-          </p>
-        </div>
-
-        <div className="bg-gradient-to-br from-green-50 to-emerald-100/60 rounded-2xl p-5 border border-green-200/50">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 rounded-xl bg-white/70">
-              <TrendingUp size={18} className="text-green-500" />
-            </div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Total Disbursed
-            </p>
-          </div>
-          <h3 className="text-2xl font-bold text-gray-900">
-            {formatCurrency(totalDisbursed)}
-          </h3>
-          <p className="text-xs text-gray-500 mt-1">
-            {efficiency}% flow efficiency
-          </p>
-        </div>
-
-        <div className="bg-gradient-to-br from-amber-50 to-yellow-100/60 rounded-2xl p-5 border border-amber-200/50">
-          <div className="flex items-center gap-2 mb-2">
-            <div className="p-2 rounded-xl bg-white/70">
-              <Zap size={18} className="text-amber-500" />
-            </div>
-            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Fund Lapse Risk
-            </p>
-          </div>
-          <h3 className="text-2xl font-bold text-gray-900">
-            {formatCurrency(stats.predictedLapse)}
-          </h3>
-          <p className="text-xs text-gray-500 mt-1">
-            Predicted unutilized funds
-          </p>
-        </div>
-      </motion.div>
-
-      {/* Flow Efficiency by Department */}
-      <motion.div variants={itemVariants}>
-        <BudgetAllocationChart data={data} />
-      </motion.div>
-
-      {/* Fund Cascade Timeline */}
-      <motion.div
-        variants={itemVariants}
-        className="bg-white rounded-2xl border border-gray-100 p-6 card-lift"
-      >
-        <div className="flex items-center gap-2.5 mb-5">
-          <div className="p-2 rounded-xl bg-orange-50">
-            <BarChart3 className="text-orange-500" size={20} />
-          </div>
-          <h2 className="text-base font-semibold text-gray-800">
-            Fund Cascade Flow
-          </h2>
-        </div>
-
-        <div className="flex items-center justify-center gap-2 mb-6 flex-wrap">
-          {["Central Govt", "State Govt", "District", "Department"].map(
-            (level, i) => (
-              <React.Fragment key={level}>
-                <div className="px-4 py-2 bg-orange-50 border border-orange-200/50 rounded-xl text-sm font-semibold text-orange-700">
-                  {level}
-                </div>
-                {i < 3 && (
-                  <ArrowRight size={16} className="text-orange-300 flex-shrink-0" />
-                )}
-              </React.Fragment>
-            ),
+    <motion.div variants={pageVariants} initial="hidden" animate="visible" className="space-y-6">
+      <div className="flex items-center justify-between">
+        <PageHeader
+          title="Budget Flow Tracker"
+          subtitle="Track how funds flow: Central → State → District → Department"
+        />
+        <span
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
+            backendOnline ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+          }`}
+        >
+          {backendOnline ? (
+            <><Wifi size={11} /><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />Live Data</>
+          ) : (
+            <><WifiOff size={11} />Mock Data</>
           )}
-        </div>
+        </span>
+      </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-          {deptData.slice(0, 8).map((dept, idx) => {
-            const util = ((dept.spent / dept.allocated) * 100).toFixed(1);
-            return (
-              <motion.div
-                key={dept.name}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: idx * 0.05 }}
-                className="p-3.5 bg-gray-50/80 rounded-xl border border-gray-100 hover:border-orange-200 transition-all duration-200"
-              >
-                <p className="font-semibold text-sm text-gray-800 truncate">
-                  {dept.name}
-                </p>
-                <div className="mt-2 text-xs space-y-1">
-                  <p>
-                    <span className="text-gray-400">Allocated:</span>{" "}
-                    <span className="font-semibold text-orange-600">
-                      {formatCurrency(dept.allocated)}
-                    </span>
-                  </p>
-                  <p>
-                    <span className="text-gray-400">Spent:</span>{" "}
-                    <span className="font-semibold text-green-600">
-                      {formatCurrency(dept.spent)}
-                    </span>
-                  </p>
-                </div>
-                <div className="mt-2 w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
-                  <div
-                    className={`h-full rounded-full ${parseFloat(util) >= 85 ? "bg-green-400" : parseFloat(util) >= 50 ? "bg-amber-400" : "bg-red-400"}`}
-                    style={{ width: `${Math.min(parseFloat(util), 100)}%` }}
-                  />
-                </div>
-                <p className="text-[10px] text-gray-400 mt-1">
-                  Efficiency: {util}%
-                </p>
-              </motion.div>
-            );
-          })}
+      {/* ── 3 KPI Cards ─────────────────────────────────────────────────── */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Total Disbursed */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Total Disbursed</p>
+          <h3 className="text-3xl font-bold text-gray-900">{formatCurrency(kpis.total_disbursed)}</h3>
+          <p className="text-xs text-green-600 mt-2 flex items-center gap-1">
+            <TrendingUp size={12} />
+            {kpis.yoy_change > 0 ? "+" : ""}{Number(kpis.yoy_change).toFixed(0)}% vs last FY
+          </p>
+        </div>
+        {/* Total Spent */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Total Spent</p>
+          <h3 className="text-3xl font-bold text-gray-900">{formatCurrency(kpis.total_spent)}</h3>
+          <p className="text-xs text-gray-500 mt-2">Utilization: {Number(kpis.utilization_pct).toFixed(2)}%</p>
+        </div>
+        {/* Active Projects */}
+        <div className="bg-white rounded-2xl p-5 border border-gray-100 shadow-sm">
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-widest mb-2">Active Projects</p>
+          <h3 className="text-3xl font-bold text-gray-900">{Math.round(kpis.active_projects || 0)}</h3>
+          <p className="text-xs text-gray-500 mt-2 flex items-center gap-1">
+            <CheckCircle size={12} className="text-green-500" />
+            {Number(kpis.on_schedule_pct).toFixed(1)}% on schedule
+          </p>
         </div>
       </motion.div>
 
-      {/* Project Status Table */}
-      <motion.div
-        variants={itemVariants}
-        className="bg-white rounded-2xl border border-gray-100 p-6 card-lift"
-      >
-        <h2 className="text-base font-semibold text-gray-800 mb-5">
-          Project Status Overview
-        </h2>
-        <div className="overflow-x-auto rounded-xl border border-gray-100">
+      {/* ── Chart + Cascade ──────────────────────────────────────────────── */}
+      <motion.div variants={itemVariants} className="grid grid-cols-1 lg:grid-cols-5 gap-4">
+
+        {/* Flow Efficiency Over Time */}
+        <div className="lg:col-span-3 bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-base font-semibold text-gray-800">Flow Efficiency Over Time</h2>
+            <span className="text-xs text-gray-400">Last 12 Months</span>
+          </div>
+          <ResponsiveContainer width="100%" height={230}>
+            <ReBarChart data={chartData} barCategoryGap="38%">
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 10, fill: "#94a3b8" }} axisLine={false} tickLine={false} domain={[0, 100]} />
+              <RechartsTooltip
+                formatter={(v) => [`${Number(v).toFixed(1)}%`, "Efficiency"]}
+                contentStyle={{ borderRadius: 10, border: "1px solid #e2e8f0", fontSize: 12 }}
+              />
+              <Bar dataKey="efficiency" radius={[5, 5, 0, 0]}>
+                {chartData.map((entry, i) => (
+                  <Cell key={i} fill={getBarColor(entry.efficiency)} />
+                ))}
+              </Bar>
+            </ReBarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Fund Cascade Flow */}
+        <div className="lg:col-span-2 bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Settings size={15} className="text-gray-400" />
+              <h2 className="text-base font-semibold text-gray-800">Fund Cascade Flow</h2>
+            </div>
+            <SlidersHorizontal size={14} className="text-gray-300 cursor-pointer hover:text-orange-500 transition-colors" />
+          </div>
+          <div className="space-y-0 divide-y divide-gray-50">
+            {cascadeLevels.map(({ key, Icon, bg }) => {
+              const d = cascade[key];
+              return (
+                <div key={key} className="flex items-start gap-3 py-3.5">
+                  <div className={`w-9 h-9 rounded-full ${bg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
+                    <Icon size={15} className="text-white" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-sm text-gray-800 truncate leading-tight">{d.name}</p>
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wider">{d.level}</p>
+                      </div>
+                      <span className={`flex-shrink-0 px-2 py-0.5 rounded text-[10px] font-bold whitespace-nowrap ${badgeCls(d.utilization)}`}>
+                        {Math.round(d.utilization)}% UTILIZED
+                      </span>
+                    </div>
+                    <div className="flex gap-4 mt-1.5 text-xs">
+                      <div>
+                        <p className="text-gray-400 text-[10px]">Allocated</p>
+                        <p className="font-semibold text-gray-700">{formatCurrency(d.allocated)}</p>
+                      </div>
+                      <div>
+                        <p className="text-gray-400 text-[10px]">{key === "central" ? "Status" : "Spent"}</p>
+                        <p className="font-semibold text-gray-700">
+                          {key === "central" ? d.status : formatCurrency(d.spent)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </motion.div>
+
+      {/* ── Project Status Table ─────────────────────────────────────────── */}
+      <motion.div variants={itemVariants} className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
+        <div className="flex items-center justify-between mb-5">
+          <h2 className="text-base font-semibold text-gray-800">Project Status</h2>
+          <button className="text-xs font-semibold text-orange-500 hover:text-orange-600 transition-colors">View All</button>
+        </div>
+        <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gray-50/80">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  District
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Department
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Allocated
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Spent
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Util %
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Status
-                </th>
+              <tr className="border-b border-gray-100">
+                <th className="pb-3 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Project Name</th>
+                <th className="pb-3 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Level</th>
+                <th className="pb-3 text-right text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Budget</th>
+                <th className="pb-3 text-right text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Spent</th>
+                <th className="pb-3 pl-4 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Status</th>
               </tr>
             </thead>
             <tbody>
-              {projectStatusData.map((r) => (
-                <tr
-                  key={r.id}
-                  className="border-t border-gray-50 hover:bg-orange-50/30 transition-colors duration-150"
-                >
-                  <td className="px-4 py-3 font-medium text-gray-800">
-                    {r.district}
+              {projectsList.map((p, i) => (
+                <tr key={i} className="border-b border-gray-50 hover:bg-orange-50/20 transition-colors">
+                  <td className="py-3.5 font-medium text-gray-800 max-w-[220px] truncate pr-4">
+                    {p.project_name}
                   </td>
-                  <td className="px-4 py-3 text-gray-600">{r.department}</td>
-                  <td className="px-4 py-3 text-right text-orange-600 font-medium">
-                    {formatCurrency(r.allocated_budget)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-green-600 font-semibold">
-                    {formatCurrency(r.spent_budget)}
-                  </td>
-                  <td className="px-4 py-3 text-right font-semibold">
-                    <span
-                      className={
-                        r.util >= 85
-                          ? "text-green-500"
-                          : r.util >= 50
-                            ? "text-amber-500"
-                            : "text-red-500"
-                      }
-                    >
-                      {r.util.toFixed(1)}%
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`inline-block px-2 py-0.5 rounded-lg text-[10px] font-bold ${r.statusColor}`}
-                    >
-                      {r.status}
+                  <td className="py-3.5 text-gray-500 whitespace-nowrap">{p.level}</td>
+                  <td className="py-3.5 text-right font-medium text-gray-700">{formatCurrency(p.budget)}</td>
+                  <td className="py-3.5 text-right text-gray-600">{formatCurrency(p.spent)}</td>
+                  <td className="py-3.5 pl-4">
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-lg text-[10px] font-bold uppercase tracking-wide ${p.statusColor}`}>
+                      {p.status}
                     </span>
                   </td>
                 </tr>

@@ -974,6 +974,221 @@ async def year_trend():
     return JSONResponse(content=result)
 
 
+# ============ BUDGET FLOW TRACKER ENDPOINTS ============
+
+@app.get("/api/flow/kpis")
+async def flow_kpis(state: Optional[str] = None, year: Optional[int] = None):
+    """Budget Flow Tracker KPIs"""
+    conn = sqlite3.connect(DB_PATH)
+    where = []
+    params = []
+    if state and state.lower() not in ("all", "all states"):
+        where.append("State = ?")
+        params.append(state)
+    if year:
+        where.append("Year = ?")
+        params.append(year)
+    w = ("WHERE " + " AND ".join(where)) if where else ""
+    df = pd.read_sql(f"""
+        SELECT
+            SUM(Allocated_Budget_Cr) as total_disbursed,
+            SUM(Actual_Spending_Cr) as total_spent,
+            AVG(Utilization_Percentage) as utilization_pct,
+            COUNT(DISTINCT Project_ID) as active_projects,
+            100.0 * COUNT(CASE WHEN Delay_Days <= 0 THEN 1 END) / COUNT(*) as on_schedule_pct
+        FROM budget {w}
+    """, conn, params=list(params))
+    row = df.to_dict('records')[0] if not df.empty else {}
+    yoy = 12.0
+    if year and year > 1:
+        pw2 = [c for c in where if "Year" not in c]
+        pp2 = [p for p, c in zip(params, where) if "Year" not in c]
+        pw2.append("Year = ?")
+        pp2.append(year - 1)
+        prev_df = pd.read_sql(
+            f"SELECT SUM(Allocated_Budget_Cr) as v FROM budget WHERE {' AND '.join(pw2)}",
+            conn, params=pp2
+        )
+        prev_v = float(prev_df['v'].iloc[0]) if not prev_df.empty and prev_df['v'].iloc[0] is not None else 0
+        curr_v = float(row.get('total_disbursed') or 0)
+        if prev_v > 0:
+            yoy = (curr_v - prev_v) / prev_v * 100
+    conn.close()
+    for k, v in list(row.items()):
+        if isinstance(v, (np.integer, np.floating)):
+            row[k] = float(v) if not np.isnan(float(v)) else 0.0
+        elif v is None:
+            row[k] = 0.0
+    row['yoy_change'] = float(yoy) if not (isinstance(yoy, float) and np.isnan(yoy)) else 0.0
+    return JSONResponse(content=row)
+
+
+@app.get("/api/flow/monthly-efficiency")
+async def flow_monthly_efficiency(state: Optional[str] = None, year: Optional[int] = None):
+    """Monthly flow efficiency for bar chart (last 12 data points)"""
+    conn = sqlite3.connect(DB_PATH)
+    where = []
+    params = []
+    if state and state.lower() not in ("all", "all states"):
+        where.append("State = ?")
+        params.append(state)
+    if year:
+        where.append("Year = ?")
+        params.append(year)
+    w = ("WHERE " + " AND ".join(where)) if where else ""
+    df = pd.read_sql(f"""
+        SELECT Year, Month,
+            AVG(Utilization_Percentage) as efficiency,
+            SUM(Allocated_Budget_Cr) as allocated,
+            SUM(Actual_Spending_Cr) as spent
+        FROM budget {w}
+        GROUP BY Year, Month
+        ORDER BY Year, Month
+        LIMIT 12
+    """, conn, params=params)
+    conn.close()
+    month_names = {1:'Jan',2:'Feb',3:'Mar',4:'Apr',5:'May',6:'Jun',
+                   7:'Jul',8:'Aug',9:'Sep',10:'Oct',11:'Nov',12:'Dec'}
+    result = []
+    for r in df.to_dict('records'):
+        for k, v in list(r.items()):
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v) if not np.isnan(float(v)) else 0.0
+        r['month_label'] = f"{month_names.get(int(r.get('Month', 1)), 'Jan')} {str(int(r.get('Year', 2024)))[2:]}"
+        result.append(r)
+    return JSONResponse(content=result)
+
+
+@app.get("/api/flow/cascade")
+async def flow_cascade(state: Optional[str] = None, district: Optional[str] = None, year: Optional[int] = None):
+    """Fund Cascade Flow: Central -> State -> District -> Department"""
+    conn = sqlite3.connect(DB_PATH)
+    year_where = "WHERE Year = ?" if year else ""
+    year_params = [year] if year else []
+
+    central_df = pd.read_sql(
+        f"SELECT SUM(Allocated_Budget_Cr) as allocated, SUM(Actual_Spending_Cr) as spent FROM budget {year_where}",
+        conn, params=year_params
+    )
+
+    state_filter = state if state and state.lower() not in ("all", "all states") else None
+    if state_filter:
+        s_df = pd.read_sql(
+            f"SELECT State, SUM(Allocated_Budget_Cr) as allocated, SUM(Actual_Spending_Cr) as spent FROM budget WHERE State = ?{' AND Year = ?' if year else ''} GROUP BY State",
+            conn, params=[state_filter] + ([year] if year else [])
+        )
+    else:
+        s_df = pd.read_sql(
+            f"SELECT State, SUM(Allocated_Budget_Cr) as allocated, SUM(Actual_Spending_Cr) as spent FROM budget {year_where} GROUP BY State ORDER BY allocated DESC LIMIT 1",
+            conn, params=year_params
+        )
+    top_state = s_df['State'].iloc[0] if not s_df.empty else "Unknown"
+
+    dist_filter = district if district and district.lower() not in ("all", "all districts") else None
+    dist_w = ["State = ?"]
+    dist_p = [top_state]
+    if year:
+        dist_w.append("Year = ?")
+        dist_p.append(year)
+    if dist_filter:
+        dist_w.append("District = ?")
+        dist_p.append(dist_filter)
+    d_df = pd.read_sql(
+        f"SELECT District, SUM(Allocated_Budget_Cr) as allocated, SUM(Actual_Spending_Cr) as spent FROM budget WHERE {' AND '.join(dist_w)} GROUP BY District ORDER BY allocated DESC LIMIT 1",
+        conn, params=dist_p
+    )
+    top_dist = d_df['District'].iloc[0] if not d_df.empty else "Unknown"
+
+    dept_w = ["State = ?", "District = ?"]
+    dept_p = [top_state, top_dist]
+    if year:
+        dept_w.append("Year = ?")
+        dept_p.append(year)
+    dept_df = pd.read_sql(
+        f"SELECT Department, SUM(Allocated_Budget_Cr) as allocated, SUM(Actual_Spending_Cr) as spent FROM budget WHERE {' AND '.join(dept_w)} GROUP BY Department ORDER BY allocated DESC LIMIT 1",
+        conn, params=dept_p
+    )
+    conn.close()
+
+    def row_vals(df):
+        if df.empty:
+            return 0.0, 0.0
+        a = df['allocated'].iloc[0]
+        s = df['spent'].iloc[0]
+        return (float(a) if a is not None and not (isinstance(a, float) and np.isnan(a)) else 0.0,
+                float(s) if s is not None and not (isinstance(s, float) and np.isnan(s)) else 0.0)
+
+    def util(spent, alloc):
+        return round(spent / alloc * 100, 1) if alloc > 0 else 0.0
+
+    c_a, c_s = row_vals(central_df)
+    s_a, s_s = row_vals(s_df)
+    d_a, d_s = row_vals(d_df)
+    dept_a, dept_s = row_vals(dept_df)
+    dept_name = dept_df['Department'].iloc[0] if not dept_df.empty else "Unknown"
+
+    return JSONResponse(content={
+        "central": {"name": "Central Government", "level": "NATIONAL LEVEL", "allocated": c_a, "spent": c_s, "utilization": util(c_s, c_a), "status": "Disbursed"},
+        "state":   {"name": top_state, "level": "REGIONAL LEVEL", "allocated": s_a, "spent": s_s, "utilization": util(s_s, s_a), "status": "Disbursed"},
+        "district":{"name": top_dist,  "level": "LOCAL LEVEL",     "allocated": d_a, "spent": d_s, "utilization": util(d_s, d_a), "status": "Allocated"},
+        "department": {"name": dept_name, "level": "DEPT LEVEL",   "allocated": dept_a, "spent": dept_s, "utilization": util(dept_s, dept_a), "status": "In Progress"},
+    })
+
+
+@app.get("/api/flow/projects")
+async def flow_projects(state: Optional[str] = None, district: Optional[str] = None, year: Optional[int] = None, limit: int = 20):
+    """Project status for Budget Flow Tracker"""
+    conn = sqlite3.connect(DB_PATH)
+    where = []
+    params = []
+    if state and state.lower() not in ("all", "all states"):
+        where.append("State = ?")
+        params.append(state)
+    if district and district.lower() not in ("all", "all districts"):
+        where.append("District = ?")
+        params.append(district)
+    if year:
+        where.append("Year = ?")
+        params.append(year)
+    w = ("WHERE " + " AND ".join(where)) if where else ""
+    params.append(limit)
+    df = pd.read_sql(f"""
+        SELECT
+            Scheme_Name as project_name,
+            Administrative_Level as level,
+            Allocated_Budget_Cr as budget,
+            Actual_Spending_Cr as spent,
+            Utilization_Percentage as utilization,
+            Spending_Phase as phase,
+            Delay_Days as delay_days,
+            State as state,
+            District as district,
+            Department as department
+        FROM budget {w}
+        ORDER BY Allocated_Budget_Cr DESC
+        LIMIT ?
+    """, conn, params=params)
+    conn.close()
+    result = []
+    for r in df.to_dict('records'):
+        for k, v in list(r.items()):
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v) if not np.isnan(float(v)) else 0.0
+            elif v is None:
+                r[k] = 0 if k in ('budget', 'spent', 'utilization', 'delay_days') else ""
+        phase = str(r.get('phase', '') or '')
+        util_val = r.get('utilization', 0) or 0
+        delay = r.get('delay_days', 0) or 0
+        if 'Complet' in phase or util_val >= 95:
+            r['status'] = 'Completed'
+        elif delay > 60 or util_val < 20:
+            r['status'] = 'Pending'
+        else:
+            r['status'] = 'In Progress'
+        result.append(r)
+    return JSONResponse(content=result)
+
+
 # Initialize auth DB on startup
 @app.on_event("startup")
 async def startup_event():

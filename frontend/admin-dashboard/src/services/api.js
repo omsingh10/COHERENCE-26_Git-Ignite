@@ -38,4 +38,32 @@ export const api = {
     fetchJSON(`/api/districts/${encodeURIComponent(state)}`),
   getMinistries: () => fetchJSON("/api/ministries"),
   getDepartments: () => fetchJSON("/api/departments"),
+
+  // Budget Flow Tracker
+  getFlowKPIs: (state, year) => {
+    const p = new URLSearchParams();
+    if (state && state !== "All States") p.set("state", state);
+    if (year) p.set("year", year);
+    return fetchJSON(`/api/flow/kpis?${p}`);
+  },
+  getFlowMonthlyEfficiency: (state, year) => {
+    const p = new URLSearchParams();
+    if (state && state !== "All States") p.set("state", state);
+    if (year) p.set("year", year);
+    return fetchJSON(`/api/flow/monthly-efficiency?${p}`);
+  },
+  getFlowCascade: (state, district, year) => {
+    const p = new URLSearchParams();
+    if (state && state !== "All States") p.set("state", state);
+    if (district && district !== "All Districts") p.set("district", district);
+    if (year) p.set("year", year);
+    return fetchJSON(`/api/flow/cascade?${p}`);
+  },
+  getFlowProjects: (limit = 20, state, district, year) => {
+    const p = new URLSearchParams({ limit });
+    if (state && state !== "All States") p.set("state", state);
+    if (district && district !== "All Districts") p.set("district", district);
+    if (year) p.set("year", year);
+    return fetchJSON(`/api/flow/projects?${p}`);
+  },
 };
