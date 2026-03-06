@@ -1423,6 +1423,71 @@ async def states_summary():
     return JSONResponse(content=result)
 
 
+# ============ BUDGET AI CHAT (GEMINI) ============
+from google import genai
+from google.genai import types as genai_types
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
+
+GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
+_genai_client = genai.Client(api_key=GEMINI_API_KEY)
+
+class ChatRequest(BaseModel):
+    message: str
+    history: list = []
+
+def _budget_system_prompt() -> str:
+    try:
+        db = os.path.join(os.path.dirname(os.path.abspath(__file__)), "budget_india.db")
+        conn = sqlite3.connect(db)
+        df = pd.read_sql_query("SELECT Allocated_Budget_Cr, Actual_Spending_Cr, State, Department FROM budget", conn)
+        conn.close()
+        total_alloc = df["Allocated_Budget_Cr"].sum() / 1e5 if "Allocated_Budget_Cr" in df.columns else 0
+        total_spent = df["Actual_Spending_Cr"].sum() / 1e5 if "Actual_Spending_Cr" in df.columns else 0
+        utilization = round((total_spent / total_alloc) * 100, 1) if total_alloc > 0 else 0
+        states = df["State"].nunique() if "State" in df.columns else 0
+        depts = df["Department"].nunique() if "Department" in df.columns else 0
+        records = len(df)
+    except Exception:
+        total_alloc, total_spent, utilization, states, depts, records = 0, 0, 0, 0, 0, 0
+
+    return f"""You are Budget AI, an expert financial analyst for the Indian Government Budget Intelligence System.
+You have access to a dataset of {records:,} budget records across {states} states and {depts} departments.
+Key Stats:
+- Total Allocated Budget: Rs {total_alloc:.2f} Lakh Crore
+- Total Actual Expenditure: Rs {total_spent:.2f} Lakh Crore
+- Average Utilization: {utilization}%
+- Known anomalies detected: 926 (215 HIGH risk, 359 MEDIUM risk, 352 LOW risk)
+Your role: Help users understand budget allocation, spending patterns, anomalies, fund utilization, and fiscal efficiency.
+Answer clearly and concisely. Use Rs for currency. Keep responses under 300 words unless detail is requested."""
+
+@app.post("/api/chat")
+async def budget_chat(req: ChatRequest):
+    try:
+        system_prompt = _budget_system_prompt()
+        # Build history in google.genai format
+        history = []
+        for msg in req.history:
+            role = msg.get("role", "user")
+            text = msg.get("text", "")
+            history.append(genai_types.Content(
+                role="user" if role == "user" else "model",
+                parts=[genai_types.Part.from_text(text=text)]
+            ))
+
+        chat = _genai_client.chats.create(
+            model="gemini-flash-lite-latest",
+            config=genai_types.GenerateContentConfig(
+                system_instruction=system_prompt,
+            ),
+            history=history,
+        )
+        response = chat.send_message(req.message)
+        return {"reply": response.text}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # Initialize auth DB on startup
 @app.on_event("startup")
 async def startup_event():

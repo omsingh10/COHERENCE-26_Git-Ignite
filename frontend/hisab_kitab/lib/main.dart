@@ -6,10 +6,8 @@ import 'dart:async';
 import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:fl_chart/fl_chart.dart';
-import 'package:google_generative_ai/google_generative_ai.dart';
 
 const String kBaseUrl = 'http://192.168.22.222:8000';
-const String kGeminiKey = 'AIzaSyA70mXw276gTEoPP-OSM16KnLTwhTymrLk';
 
 // ============ COLORS ============
 class C {
@@ -3049,7 +3047,11 @@ class _ChatMsg {
   final String text;
   final bool isUser;
   final bool isError;
-  const _ChatMsg({required this.text, required this.isUser, this.isError = false});
+  const _ChatMsg({
+    required this.text,
+    required this.isUser,
+    this.isError = false,
+  });
 }
 
 class BudgetGptScreen extends StatefulWidget {
@@ -3061,10 +3063,11 @@ class BudgetGptScreen extends StatefulWidget {
 
 class _BudgetGptScreenState extends State<BudgetGptScreen> {
   final List<_ChatMsg> _messages = [];
+  // history stored as {role, text} maps for sending to backend
+  final List<Map<String, String>> _history = [];
   final TextEditingController _ctrl = TextEditingController();
   final ScrollController _scroll = ScrollController();
   bool _thinking = false;
-  ChatSession? _chat;
 
   static const _suggestions = [
     'Which department has the highest anomalies?',
@@ -3075,40 +3078,6 @@ class _BudgetGptScreenState extends State<BudgetGptScreen> {
     'Explain how to detect fund leakage',
   ];
 
-  @override
-  void initState() {
-    super.initState();
-    _initGemini();
-  }
-
-  void _initGemini() {
-    try {
-      final model = GenerativeModel(
-        model: 'gemini-1.5-flash',
-        apiKey: kGeminiKey,
-        systemInstruction: Content.text(_systemPrompt()),
-      );
-      _chat = model.startChat();
-    } catch (_) {}
-  }
-
-  String _systemPrompt() {
-    final s = widget.summary;
-    return '''You are Budget AI, an expert financial analyst embedded in the Hisab Kitab app — an Indian government fund allocation tracker.
-
-Real budget data context:
-- Total Records: ${s?['total_records'] ?? 12000}
-- Total Allocated: ₹${s?['total_allocated'] ?? 'N/A'} Crore
-- Total Spent: ₹${s?['total_spent'] ?? 'N/A'} Crore
-- Avg Utilization: ${s?['avg_utilization'] ?? '~77'}%
-- Anomalies Detected: 926 (HIGH: 215, MEDIUM: 359, LOW: 352)
-- States covered: Uttar Pradesh, Maharashtra, Gujarat, Tamil Nadu, West Bengal, Karnataka, Rajasthan
-- Top departments: Highway Development, Urban Infrastructure, Road Transport, Railway Coordination, Digital Governance, IT Infrastructure, Medical Education, Public Health
-
-Answer questions about fund allocation, utilization, corruption/anomaly risks, and budget optimization.
-Be concise, actionable, and data-driven. Use ₹ currency symbol. Keep responses under 200 words unless asked for detail.''';
-  }
-
   Future<void> _send(String text) async {
     if (text.trim().isEmpty || _thinking) return;
     _ctrl.clear();
@@ -3117,29 +3086,46 @@ Be concise, actionable, and data-driven. Use ₹ currency symbol. Keep responses
       _thinking = true;
     });
     _scrollDown();
-    if (_chat == null) {
-      setState(() {
-        _messages.add(const _ChatMsg(text: 'Gemini not initialized. Check API key.', isUser: false, isError: true));
-        _thinking = false;
-      });
-      return;
-    }
     try {
-      final response = await _chat!.sendMessage(Content.text(text));
-      final reply = response.text ?? 'No response received.';
-      if (mounted) {
-        setState(() {
-          _messages.add(_ChatMsg(text: reply, isUser: false));
-          _thinking = false;
-        });
+      final res = await http.post(
+        Uri.parse('$kBaseUrl/api/chat'),
+        headers: {'Content-Type': 'application/json'},
+        body: json.encode({'message': text, 'history': _history}),
+      );
+      if (res.statusCode == 200) {
+        final reply =
+            (json.decode(res.body) as Map)['reply'] as String? ??
+            'No response.';
+        _history.add({'role': 'user', 'text': text});
+        _history.add({'role': 'model', 'text': reply});
+        if (mounted)
+          setState(() {
+            _messages.add(_ChatMsg(text: reply, isUser: false));
+            _thinking = false;
+          });
+      } else {
+        final detail =
+            (json.decode(res.body) as Map)['detail']?.toString() ?? res.body;
+        if (mounted)
+          setState(() {
+            _messages.add(
+              _ChatMsg(text: 'Error: $detail', isUser: false, isError: true),
+            );
+            _thinking = false;
+          });
       }
     } catch (e) {
-      if (mounted) {
+      if (mounted)
         setState(() {
-          _messages.add(_ChatMsg(text: 'Error: ${e.toString().replaceAll(RegExp(r'\[.*?\]'), '').trim()}', isUser: false, isError: true));
+          _messages.add(
+            _ChatMsg(
+              text: 'Error: ${e.toString()}',
+              isUser: false,
+              isError: true,
+            ),
+          );
           _thinking = false;
         });
-      }
     }
     _scrollDown();
   }
@@ -3147,8 +3133,11 @@ Be concise, actionable, and data-driven. Use ₹ currency symbol. Keep responses
   void _scrollDown() {
     Future.delayed(const Duration(milliseconds: 150), () {
       if (_scroll.hasClients) {
-        _scroll.animateTo(_scroll.position.maxScrollExtent,
-          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+        _scroll.animateTo(
+          _scroll.position.maxScrollExtent,
+          duration: const Duration(milliseconds: 300),
+          curve: Curves.easeOut,
+        );
       }
     });
   }
@@ -3166,81 +3155,153 @@ Be concise, actionable, and data-driven. Use ₹ currency symbol. Keep responses
       backgroundColor: C.bg,
       appBar: AppBar(
         titleSpacing: 16,
-        title: Row(children: [
-          Container(padding: const EdgeInsets.all(7),
-            decoration: BoxDecoration(color: C.orangeLight, borderRadius: BorderRadius.circular(10)),
-            child: const Icon(Icons.auto_awesome_rounded, color: C.orange, size: 18)),
-          const SizedBox(width: 10),
-          const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Budget AI', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-            Text('Powered by Gemini', style: TextStyle(fontSize: 11, color: C.muted, fontWeight: FontWeight.w400)),
-          ]),
-        ]),
-        bottom: PreferredSize(preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: C.border)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: C.orangeLight,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(
+                Icons.auto_awesome_rounded,
+                color: C.orange,
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Budget AI',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                ),
+                Text(
+                  'Powered by Gemini',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: C.muted,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(height: 1, color: C.border),
+        ),
         actions: [
           if (_messages.isNotEmpty)
             IconButton(
               icon: const Icon(Icons.refresh_rounded, color: C.muted, size: 20),
               tooltip: 'Clear chat',
-              onPressed: () => setState(() { _messages.clear(); _initGemini(); }),
+              onPressed: () => setState(() {
+                _messages.clear();
+                _history.clear();
+              }),
             ),
           const SizedBox(width: 4),
         ],
       ),
-      body: Column(children: [
-        Expanded(
-          child: _messages.isEmpty
-            ? _buildWelcome()
-            : ListView.builder(
-                controller: _scroll,
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                itemCount: _messages.length + (_thinking ? 1 : 0),
-                itemBuilder: (ctx, i) {
-                  if (i == _messages.length) return _buildTyping();
-                  return _buildBubble(_messages[i]);
-                },
-              ),
-        ),
-        _buildInput(),
-      ]),
+      body: Column(
+        children: [
+          Expanded(
+            child: _messages.isEmpty
+                ? _buildWelcome()
+                : ListView.builder(
+                    controller: _scroll,
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    itemCount: _messages.length + (_thinking ? 1 : 0),
+                    itemBuilder: (ctx, i) {
+                      if (i == _messages.length) return _buildTyping();
+                      return _buildBubble(_messages[i]);
+                    },
+                  ),
+          ),
+          _buildInput(),
+        ],
+      ),
     );
   }
 
   Widget _buildWelcome() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
-      child: Column(children: [
-        const SizedBox(height: 20),
-        Container(width: 80, height: 80,
-          decoration: BoxDecoration(color: C.orangeLight, borderRadius: BorderRadius.circular(24)),
-          child: const Icon(Icons.auto_awesome_rounded, color: C.orange, size: 40)),
-        const SizedBox(height: 16),
-        const Text('Ask me anything', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w800, color: C.dark)),
-        const SizedBox(height: 8),
-        const Text('I have full context of India\'s\ngovernment budget data', textAlign: TextAlign.center,
-          style: TextStyle(fontSize: 14, color: C.muted, height: 1.5)),
-        const SizedBox(height: 28),
-        Wrap(spacing: 8, runSpacing: 8, children: _suggestions.map((s) =>
-          InkWell(
-            onTap: () => _send(s),
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: C.white,
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: C.border),
-              ),
-              child: Row(mainAxisSize: MainAxisSize.min, children: [
-                const Icon(Icons.lightbulb_outline_rounded, color: C.orange, size: 14),
-                const SizedBox(width: 6),
-                Text(s, style: const TextStyle(fontSize: 13, color: C.dark)),
-              ]),
+      child: Column(
+        children: [
+          const SizedBox(height: 20),
+          Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              color: C.orangeLight,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: C.orange,
+              size: 40,
             ),
           ),
-        ).toList()),
-      ]),
+          const SizedBox(height: 16),
+          const Text(
+            'Ask me anything',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: C.dark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'I have full context of India\'s\ngovernment budget data',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: C.muted, height: 1.5),
+          ),
+          const SizedBox(height: 28),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: _suggestions
+                .map(
+                  (s) => InkWell(
+                    onTap: () => _send(s),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: C.white,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: C.border),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.lightbulb_outline_rounded,
+                            color: C.orange,
+                            size: 14,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            s,
+                            style: const TextStyle(fontSize: 13, color: C.dark),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                )
+                .toList(),
+          ),
+        ],
+      ),
     );
   }
 
@@ -3248,72 +3309,141 @@ Be concise, actionable, and data-driven. Use ₹ currency symbol. Keep responses
     if (msg.isUser) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 14, left: 48),
-        child: Row(mainAxisAlignment: MainAxisAlignment.end, crossAxisAlignment: CrossAxisAlignment.end, children: [
-          Flexible(child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-            decoration: const BoxDecoration(
-              color: C.orange,
-              borderRadius: BorderRadius.only(
-                topLeft: Radius.circular(18), topRight: Radius.circular(18),
-                bottomLeft: Radius.circular(18), bottomRight: Radius.circular(4)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 11,
+                ),
+                decoration: const BoxDecoration(
+                  color: C.orange,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(18),
+                    topRight: Radius.circular(18),
+                    bottomLeft: Radius.circular(18),
+                    bottomRight: Radius.circular(4),
+                  ),
+                ),
+                child: Text(
+                  msg.text,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                ),
+              ),
             ),
-            child: Text(msg.text, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4)),
-          )),
-          const SizedBox(width: 8),
-          CircleAvatar(radius: 15, backgroundColor: C.orange,
-            child: const Icon(Icons.person_rounded, color: Colors.white, size: 16)),
-        ]),
+            const SizedBox(width: 8),
+            CircleAvatar(
+              radius: 15,
+              backgroundColor: C.orange,
+              child: const Icon(
+                Icons.person_rounded,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ],
+        ),
       );
     }
     return Padding(
       padding: const EdgeInsets.only(bottom: 14, right: 48),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(width: 30, height: 30,
-          decoration: BoxDecoration(color: C.orangeLight, borderRadius: BorderRadius.circular(10)),
-          child: const Icon(Icons.auto_awesome_rounded, color: C.orange, size: 16)),
-        const SizedBox(width: 8),
-        Flexible(child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-          decoration: BoxDecoration(
-            color: msg.isError ? C.dangerLight : C.white,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(4), topRight: Radius.circular(18),
-              bottomLeft: Radius.circular(18), bottomRight: Radius.circular(18)),
-            border: Border.all(color: msg.isError ? C.danger : C.border),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: C.orangeLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: C.orange,
+              size: 16,
+            ),
           ),
-          child: Text(msg.text,
-            style: TextStyle(color: msg.isError ? C.danger : C.dark, fontSize: 14, height: 1.6)),
-        )),
-      ]),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
+              decoration: BoxDecoration(
+                color: msg.isError ? C.dangerLight : C.white,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(4),
+                  topRight: Radius.circular(18),
+                  bottomLeft: Radius.circular(18),
+                  bottomRight: Radius.circular(18),
+                ),
+                border: Border.all(color: msg.isError ? C.danger : C.border),
+              ),
+              child: Text(
+                msg.text,
+                style: TextStyle(
+                  color: msg.isError ? C.danger : C.dark,
+                  fontSize: 14,
+                  height: 1.6,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildTyping() {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14, right: 48),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(width: 30, height: 30,
-          decoration: BoxDecoration(color: C.orangeLight, borderRadius: BorderRadius.circular(10)),
-          child: const Icon(Icons.auto_awesome_rounded, color: C.orange, size: 16)),
-        const SizedBox(width: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(
-            color: C.white,
-            borderRadius: const BorderRadius.only(
-              topLeft: Radius.circular(4), topRight: Radius.circular(18),
-              bottomLeft: Radius.circular(18), bottomRight: Radius.circular(18)),
-            border: Border.all(color: C.border),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 30,
+            height: 30,
+            decoration: BoxDecoration(
+              color: C.orangeLight,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.auto_awesome_rounded,
+              color: C.orange,
+              size: 16,
+            ),
           ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            _AnimatedDot(delay: 0),
-            const SizedBox(width: 4),
-            _AnimatedDot(delay: 200),
-            const SizedBox(width: 4),
-            _AnimatedDot(delay: 400),
-          ]),
-        ),
-      ]),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: C.white,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(4),
+                topRight: Radius.circular(18),
+                bottomLeft: Radius.circular(18),
+                bottomRight: Radius.circular(18),
+              ),
+              border: Border.all(color: C.border),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _AnimatedDot(delay: 0),
+                const SizedBox(width: 4),
+                _AnimatedDot(delay: 200),
+                const SizedBox(width: 4),
+                _AnimatedDot(delay: 400),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -3322,38 +3452,69 @@ Be concise, actionable, and data-driven. Use ₹ currency symbol. Keep responses
       child: Container(
         padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
         decoration: const BoxDecoration(
-          color: C.white, border: Border(top: BorderSide(color: C.border))),
-        child: Row(children: [
-          Expanded(child: TextField(
-            controller: _ctrl,
-            onSubmitted: _send,
-            textInputAction: TextInputAction.send,
-            maxLines: null,
-            style: const TextStyle(fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'Ask about budget data...',
-              hintStyle: const TextStyle(color: C.muted, fontSize: 14),
-              filled: true, fillColor: C.bg,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(24),
-                borderSide: const BorderSide(color: C.border)),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24),
-                borderSide: const BorderSide(color: C.border)),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24),
-                borderSide: const BorderSide(color: C.orange, width: 1.5)),
-              contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 11),
+          color: C.white,
+          border: Border(top: BorderSide(color: C.border)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _ctrl,
+                onSubmitted: _send,
+                textInputAction: TextInputAction.send,
+                maxLines: null,
+                style: const TextStyle(fontSize: 14),
+                decoration: InputDecoration(
+                  hintText: 'Ask about budget data...',
+                  hintStyle: const TextStyle(color: C.muted, fontSize: 14),
+                  filled: true,
+                  fillColor: C.bg,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: const BorderSide(color: C.border),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: const BorderSide(color: C.border),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(24),
+                    borderSide: const BorderSide(color: C.orange, width: 1.5),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                    vertical: 11,
+                  ),
+                ),
+              ),
             ),
-          )),
-          const SizedBox(width: 10),
-          GestureDetector(
-            onTap: () => _send(_ctrl.text),
-            child: Container(width: 46, height: 46,
-              decoration: BoxDecoration(color: C.orange, borderRadius: BorderRadius.circular(23)),
-              child: _thinking
-                ? const Padding(padding: EdgeInsets.all(13),
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                : const Icon(Icons.send_rounded, color: Colors.white, size: 20)),
-          ),
-        ]),
+            const SizedBox(width: 10),
+            GestureDetector(
+              onTap: () => _send(_ctrl.text),
+              child: Container(
+                width: 46,
+                height: 46,
+                decoration: BoxDecoration(
+                  color: C.orange,
+                  borderRadius: BorderRadius.circular(23),
+                ),
+                child: _thinking
+                    ? const Padding(
+                        padding: EdgeInsets.all(13),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Icon(
+                        Icons.send_rounded,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -3366,17 +3527,22 @@ class _AnimatedDot extends StatefulWidget {
   State<_AnimatedDot> createState() => _AnimatedDotState();
 }
 
-class _AnimatedDotState extends State<_AnimatedDot> with SingleTickerProviderStateMixin {
+class _AnimatedDotState extends State<_AnimatedDot>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _ac;
   late final Animation<double> _anim;
 
   @override
   void initState() {
     super.initState();
-    _ac = AnimationController(vsync: this, duration: const Duration(milliseconds: 600))
-      ..repeat(reverse: true);
-    _anim = Tween(begin: 0.25, end: 1.0).animate(
-      CurvedAnimation(parent: _ac, curve: Curves.easeInOut));
+    _ac = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 600),
+    )..repeat(reverse: true);
+    _anim = Tween(
+      begin: 0.25,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _ac, curve: Curves.easeInOut));
     if (widget.delay > 0) {
       _ac.stop();
       Future.delayed(Duration(milliseconds: widget.delay), () {
@@ -3386,14 +3552,23 @@ class _AnimatedDotState extends State<_AnimatedDot> with SingleTickerProviderSta
   }
 
   @override
-  void dispose() { _ac.dispose(); super.dispose(); }
+  void dispose() {
+    _ac.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return FadeTransition(
       opacity: _anim,
-      child: Container(width: 8, height: 8,
-        decoration: const BoxDecoration(color: C.orange, shape: BoxShape.circle)),
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(
+          color: C.orange,
+          shape: BoxShape.circle,
+        ),
+      ),
     );
   }
 }
