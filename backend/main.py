@@ -699,6 +699,281 @@ async def websocket_alerts(ws: WebSocket):
     except WebSocketDisconnect:
         alert_manager.disconnect(ws)
 
+# ============ DASHBOARD ENDPOINTS (serve CSV data to React frontend) ============
+
+@app.get("/api/dashboard/kpis")
+async def dashboard_kpis():
+    """KPI summary cards for React dashboard"""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql("""
+        SELECT
+            SUM(Allocated_Budget_Cr) as total_allocated,
+            SUM(Actual_Spending_Cr) as total_spent,
+            SUM(Remaining_Budget_Cr) as total_remaining,
+            AVG(Utilization_Percentage) as avg_utilization,
+            COUNT(CASE WHEN Anomaly_Tag != 'Normal' THEN 1 END) as anomaly_count,
+            COUNT(CASE WHEN Delay_Days > 90 THEN 1 END) as delayed_projects,
+            COUNT(*) as total_projects,
+            COUNT(DISTINCT State) as total_states,
+            COUNT(DISTINCT Department) as total_departments
+        FROM budget
+    """, conn)
+    conn.close()
+    r = df.to_dict('records')[0]
+    for k, v in r.items():
+        if isinstance(v, (float, np.floating)) and (np.isnan(v) or np.isinf(v)):
+            r[k] = 0
+        elif isinstance(v, (np.integer, np.floating)):
+            r[k] = float(v)
+    return JSONResponse(content=r)
+
+
+@app.get("/api/dashboard/department-allocation")
+async def department_allocation():
+    """Department-wise budget allocation for bar/pie charts"""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql("""
+        SELECT
+            Department,
+            SUM(Allocated_Budget_Cr) as allocated,
+            SUM(Actual_Spending_Cr) as spent,
+            AVG(Utilization_Percentage) as utilization,
+            COUNT(*) as projects
+        FROM budget
+        GROUP BY Department
+        ORDER BY allocated DESC
+        LIMIT 15
+    """, conn)
+    conn.close()
+    result = []
+    for r in df.to_dict('records'):
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
+        result.append(r)
+    return JSONResponse(content=result)
+
+
+@app.get("/api/dashboard/monthly-trend")
+async def monthly_trend():
+    """Monthly spending trend for line chart"""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql("""
+        SELECT
+            Year,
+            Month,
+            SUM(Allocated_Budget_Cr) as allocated,
+            SUM(Actual_Spending_Cr) as spent
+        FROM budget
+        GROUP BY Year, Month
+        ORDER BY Year, Month
+    """, conn)
+    conn.close()
+    result = []
+    months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+    for r in df.to_dict('records'):
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
+        r['month_name'] = months[int(r['Month']) - 1] if 1 <= int(r['Month']) <= 12 else str(r['Month'])
+        result.append(r)
+    return JSONResponse(content=result)
+
+
+@app.get("/api/dashboard/state-summary")
+async def state_summary_dashboard():
+    """State-wise summary for map/chart"""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql("""
+        SELECT
+            State,
+            SUM(Allocated_Budget_Cr) as allocated,
+            SUM(Actual_Spending_Cr) as spent,
+            AVG(Utilization_Percentage) as utilization,
+            COUNT(CASE WHEN Anomaly_Tag != 'Normal' THEN 1 END) as anomalies,
+            AVG(Delay_Days) as avg_delay,
+            COUNT(*) as projects
+        FROM budget
+        GROUP BY State
+        ORDER BY allocated DESC
+    """, conn)
+    conn.close()
+    result = []
+    for r in df.to_dict('records'):
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
+        result.append(r)
+    return JSONResponse(content=result)
+
+
+@app.get("/api/dashboard/anomalies-list")
+async def anomalies_list(limit: int = 20):
+    """Recent anomaly records for anomaly panel"""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql(f"""
+        SELECT
+            Project_ID, State, District, Ministry, Department,
+            Scheme_Name, Allocated_Budget_Cr, Actual_Spending_Cr,
+            Utilization_Percentage, Delay_Days, Anomaly_Tag, Year
+        FROM budget
+        WHERE Anomaly_Tag != 'Normal'
+           OR Utilization_Percentage < 30
+           OR Delay_Days > 90
+        ORDER BY Delay_Days DESC, Utilization_Percentage ASC
+        LIMIT {int(limit)}
+    """, conn)
+    conn.close()
+    result = []
+    for r in df.to_dict('records'):
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
+            elif v is None or (isinstance(v, float) and np.isnan(v)):
+                r[k] = None
+        result.append(r)
+    return JSONResponse(content=result)
+
+
+@app.get("/api/dashboard/top-districts")
+async def top_districts(limit: int = 15):
+    """Top districts by allocation for leakage heatmap"""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql(f"""
+        SELECT
+            District,
+            State,
+            SUM(Allocated_Budget_Cr) as allocated,
+            SUM(Actual_Spending_Cr) as spent,
+            AVG(Utilization_Percentage) as utilization,
+            COUNT(CASE WHEN Anomaly_Tag != 'Normal' THEN 1 END) as anomalies,
+            AVG(Delay_Days) as avg_delay
+        FROM budget
+        GROUP BY District, State
+        ORDER BY allocated DESC
+        LIMIT {int(limit)}
+    """, conn)
+    conn.close()
+    result = []
+    for r in df.to_dict('records'):
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
+        result.append(r)
+    return JSONResponse(content=result)
+
+
+@app.get("/api/dashboard/schemes")
+async def schemes_list(state: str = None, department: str = None, limit: int = 50):
+    """Scheme-wise data with optional filters"""
+    conn = sqlite3.connect(DB_PATH)
+    query = """
+        SELECT
+            Scheme_Name, Ministry, Department, State, District,
+            SUM(Allocated_Budget_Cr) as allocated,
+            SUM(Actual_Spending_Cr) as spent,
+            AVG(Utilization_Percentage) as utilization,
+            AVG(Delay_Days) as avg_delay,
+            COUNT(*) as record_count
+        FROM budget
+        WHERE 1=1
+    """
+    params = []
+    if state:
+        query += " AND State = ?"
+        params.append(state)
+    if department:
+        query += " AND Department = ?"
+        params.append(department)
+    query += f" GROUP BY Scheme_Name, Ministry, Department, State, District ORDER BY allocated DESC LIMIT {int(limit)}"
+    df = pd.read_sql(query, conn, params=params)
+    conn.close()
+    result = []
+    for r in df.to_dict('records'):
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
+        result.append(r)
+    return JSONResponse(content=result)
+
+
+@app.get("/api/dashboard/risk-projects")
+async def risk_projects(limit: int = 30):
+    """High-risk projects for risk intelligence panel"""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql(f"""
+        SELECT
+            Project_ID, State, District, Department, Scheme_Name,
+            Allocated_Budget_Cr, Utilization_Percentage,
+            Delay_Days, Anomaly_Tag, Economic_Priority_Level,
+            District_Development_Index
+        FROM budget
+        WHERE Utilization_Percentage < 40 OR Delay_Days > 60 OR Anomaly_Tag != 'Normal'
+        ORDER BY Delay_Days DESC, Utilization_Percentage ASC
+        LIMIT {int(limit)}
+    """, conn)
+    conn.close()
+    result = []
+    for r in df.to_dict('records'):
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
+            elif v is None or (isinstance(v, float) and np.isnan(v)):
+                r[k] = None
+        result.append(r)
+    return JSONResponse(content=result)
+
+
+@app.get("/api/dashboard/spending-category")
+async def spending_category():
+    """Spending by category (Education, Health, etc.)"""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql("""
+        SELECT
+            Spending_Category,
+            SUM(Allocated_Budget_Cr) as allocated,
+            SUM(Actual_Spending_Cr) as spent,
+            AVG(Utilization_Percentage) as utilization,
+            COUNT(*) as projects
+        FROM budget
+        GROUP BY Spending_Category
+        ORDER BY allocated DESC
+    """, conn)
+    conn.close()
+    result = []
+    for r in df.to_dict('records'):
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
+        result.append(r)
+    return JSONResponse(content=result)
+
+
+@app.get("/api/dashboard/year-trend")
+async def year_trend():
+    """Year-wise allocation and spending trend"""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql("""
+        SELECT
+            Year,
+            SUM(Allocated_Budget_Cr) as allocated,
+            SUM(Actual_Spending_Cr) as spent,
+            AVG(Utilization_Percentage) as utilization,
+            COUNT(CASE WHEN Anomaly_Tag != 'Normal' THEN 1 END) as anomalies
+        FROM budget
+        GROUP BY Year
+        ORDER BY Year
+    """, conn)
+    conn.close()
+    result = []
+    for r in df.to_dict('records'):
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
+        result.append(r)
+    return JSONResponse(content=result)
+
+
 # Initialize auth DB on startup
 @app.on_event("startup")
 async def startup_event():

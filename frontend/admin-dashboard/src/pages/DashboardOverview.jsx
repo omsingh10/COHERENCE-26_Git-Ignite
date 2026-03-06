@@ -1,6 +1,6 @@
 import React from "react";
 import { motion } from "framer-motion";
-import { Zap } from "lucide-react";
+import { Zap, Wifi, WifiOff } from "lucide-react";
 import KPIDashboard from "../components/KPIDashboard";
 import {
   BudgetAllocationChart,
@@ -19,7 +19,7 @@ import { generateSummaryStats } from "../data/mockData";
 import { filterDataByFilters } from "../utils/helpers";
 import { useFilterStore, useDashboardStore } from "../hooks/store";
 
-export const DashboardOverview = ({ mockData }) => {
+export const DashboardOverview = ({ mockData, backendData, backendStats, isBackendOnline }) => {
   const filters = useFilterStore();
   const { setAnalysisLoading } = useDashboardStore();
 
@@ -30,9 +30,12 @@ export const DashboardOverview = ({ mockData }) => {
     department: filters.department,
   });
 
-  const stats = generateSummaryStats(
+  const mockStats = generateSummaryStats(
     filteredData.length > 0 ? filteredData : mockData,
   );
+
+  // Use real backend stats when available, fall back to mock
+  const stats = backendStats || mockStats;
 
   const handleAnalysis = () => {
     setAnalysisLoading(true);
@@ -40,6 +43,38 @@ export const DashboardOverview = ({ mockData }) => {
   };
 
   const activeData = filteredData.length > 0 ? filteredData : mockData;
+
+  // Build chart-compatible data from backend if available
+  const deptChartData = backendData?.deptAlloc
+    ? backendData.deptAlloc.map((d) => ({
+        department: d.Department,
+        allocated_budget: d.allocated,
+        spent_budget: d.spent,
+        utilization_rate: d.utilization,
+      }))
+    : activeData;
+
+  const monthlyChartData = backendData?.monthlyTrend
+    ? backendData.monthlyTrend.map((d) => ({
+        month: d.month_name,
+        year: d.Year,
+        allocated_budget: d.allocated,
+        spent_budget: d.spent,
+      }))
+    : activeData;
+
+  const anomalyData = backendData?.anomalies
+    ? backendData.anomalies.map((d) => ({
+        district: d.District,
+        state: d.State,
+        department: d.Department,
+        allocated_budget: d.Allocated_Budget_Cr,
+        spent_budget: d.Actual_Spending_Cr,
+        utilization_rate: d.Utilization_Percentage,
+        anomaly_flag: d.Anomaly_Tag !== "Normal" ? d.Anomaly_Tag : "NONE",
+        risk_score: d.Delay_Days > 90 ? 80 : d.Utilization_Percentage < 30 ? 75 : 40,
+      }))
+    : activeData;
 
   return (
     <div className="space-y-6">
@@ -57,15 +92,21 @@ export const DashboardOverview = ({ mockData }) => {
             Public Budget Intelligence & Leakage Detection
           </p>
         </div>
-        <motion.button
-          whileHover={{ scale: 1.03 }}
-          whileTap={{ scale: 0.97 }}
-          onClick={handleAnalysis}
-          className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:from-orange-600 hover:to-orange-700 transition-all duration-200 font-semibold text-sm shadow-md"
-        >
-          <Zap size={16} />
-          Run Analysis
-        </motion.button>
+        <div className="flex items-center gap-3">
+          <span className={`flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-full ${isBackendOnline ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+            {isBackendOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
+            {isBackendOnline ? 'Live Data (12,000 records)' : 'Mock Data'}
+          </span>
+          <motion.button
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
+            onClick={handleAnalysis}
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl hover:from-orange-600 hover:to-orange-700 transition-all duration-200 font-semibold text-sm shadow-md"
+          >
+            <Zap size={16} />
+            Run Analysis
+          </motion.button>
+        </div>
       </motion.div>
 
       {/* KPI Cards */}
@@ -73,21 +114,21 @@ export const DashboardOverview = ({ mockData }) => {
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <BudgetAllocationChart data={activeData} />
-        <SpendingEfficiencyChart data={activeData} />
+        <BudgetAllocationChart data={deptChartData} />
+        <SpendingEfficiencyChart data={deptChartData} />
       </div>
 
       {/* Monthly Trend */}
-      <MonthlySpendinTrendChart data={activeData} />
+      <MonthlySpendinTrendChart data={monthlyChartData} />
 
       {/* Anomalies and Lapse Predictor */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <AnomalyDetectionPanel data={activeData} />
+        <AnomalyDetectionPanel data={anomalyData} />
         <FundLapsePredictorPanel data={activeData} />
       </div>
 
       {/* Risk Ranking */}
-      <RiskIntelligenceRanking data={activeData} />
+      <RiskIntelligenceRanking data={anomalyData} />
 
       {/* Budget GPT */}
       <BudgetGPT data={activeData} />
