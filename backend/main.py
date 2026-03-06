@@ -81,14 +81,17 @@ def init_auth_db():
     
     # Insert demo users (password: admin123 for all)
     demo_hash = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode("utf-8")
-    cursor.execute('''
-        INSERT OR IGNORE INTO users (username, email, full_name, hashed_password, role, department)
-        VALUES 
-        (?, 'admin@gov.in', 'Admin User', ?, 'admin', NULL),
-        (?, 'health@gov.in', 'Health Officer', ?, 'department', 'Health'),
-        (?, 'education@gov.in', 'Education Officer', ?, 'department', 'Education'),
-        (?, 'public@citizen.in', 'Public User', ?, 'public', NULL)
-    ''', ('admin', demo_hash, 'health_dept', demo_hash, 'education_dept', demo_hash, 'public_user', demo_hash))
+    for uname, email, fname, role, dept in [
+        ('admin', 'admin@gov.in', 'Admin User', 'admin', None),
+        ('health_dept', 'health@gov.in', 'Health Officer', 'department', 'Health'),
+        ('education_dept', 'education@gov.in', 'Education Officer', 'department', 'Education'),
+        ('public_user', 'public@citizen.in', 'Public User', 'public', None),
+    ]:
+        cursor.execute('''
+            INSERT INTO users (username, email, full_name, hashed_password, role, department)
+            VALUES (?, ?, ?, ?, ?, ?)
+            ON CONFLICT(username) DO UPDATE SET hashed_password=excluded.hashed_password
+        ''', (uname, email, fname, demo_hash, role, dept))
     
     conn.commit()
     conn.close()
