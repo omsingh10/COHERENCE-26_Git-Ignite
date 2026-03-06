@@ -365,6 +365,66 @@ async def department_summary(
     
     return JSONResponse(content=df_to_json(df))
 
+# 7a. ALL ANOMALIES LIST (Auth required) — must be defined BEFORE /{department}
+@app.get("/api/anomalies/list")
+async def anomalies_list(
+    limit: int = 50,
+    current_user: User = Depends(get_current_active_user)
+):
+    """Get all anomaly-tagged records with risk classification - Auth required"""
+    conn = sqlite3.connect(DB_PATH)
+
+    counts_df = pd.read_sql("""
+        SELECT
+            COUNT(*) as total,
+            SUM(CASE WHEN Utilization_Percentage > 150 OR Delay_Days > 90 THEN 1 ELSE 0 END) as high_risk,
+            SUM(CASE WHEN (Utilization_Percentage > 120 OR Delay_Days > 45)
+                         AND NOT (Utilization_Percentage > 150 OR Delay_Days > 90) THEN 1 ELSE 0 END) as medium_risk
+        FROM budget WHERE UPPER(Anomaly_Tag) != 'NORMAL'
+    """, conn)
+
+    records_df = pd.read_sql("""
+        SELECT Project_ID, Department, State, District, Scheme_Name,
+               Allocated_Budget_Cr as allocated, Actual_Spending_Cr as spent,
+               Utilization_Percentage as utilization, Anomaly_Tag as anomaly_tag,
+               Delay_Days as delay_days
+        FROM budget WHERE UPPER(Anomaly_Tag) != 'NORMAL'
+        ORDER BY Utilization_Percentage DESC, Delay_Days DESC
+        LIMIT ?
+    """, conn, params=[limit])
+    conn.close()
+
+    def get_risk(row):
+        if row['utilization'] > 150 or row['delay_days'] > 90:
+            return 'HIGH'
+        elif row['utilization'] > 120 or row['delay_days'] > 45:
+            return 'MEDIUM'
+        return 'LOW'
+
+    if not records_df.empty:
+        records_df['risk_level'] = records_df.apply(get_risk, axis=1)
+
+    records = records_df.to_dict('records')
+    for r in records:
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
+            elif not isinstance(v, str) and pd.isna(v) if hasattr(pd, 'isna') else False:
+                r[k] = None
+
+    counts = counts_df.to_dict('records')[0] if not counts_df.empty else {}
+    total = int(counts.get('total', 0))
+    high = int(counts.get('high_risk', 0))
+    medium = int(counts.get('medium_risk', 0))
+
+    return {
+        "total_anomalies": total,
+        "high_risk": high,
+        "medium_risk": medium,
+        "low_risk": max(0, total - high - medium),
+        "records": records
+    }
+
 # 7. ANOMALY DETECTION (ML-BASED) - Department users can access their own department
 @app.get("/api/anomalies/{department}")
 async def detect_anomalies(
@@ -1314,6 +1374,52 @@ async def flow_projects(state: Optional[str] = None, district: Optional[str] = N
         else:
             r['status'] = 'In Progress'
         result.append(r)
+    return JSONResponse(content=result)
+
+
+# 14. DEPARTMENT-WISE SUMMARY (Public) — for bar chart
+@app.get("/api/dept-summary")
+async def dept_summary():
+    """Get department-wise budget totals - Public access"""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql("""
+        SELECT Department,
+               SUM(Allocated_Budget_Cr) as allocated,
+               SUM(Actual_Spending_Cr) as spent,
+               AVG(Utilization_Percentage) as utilization,
+               SUM(CASE WHEN UPPER(Anomaly_Tag) != 'NORMAL' THEN 1 ELSE 0 END) as anomaly_count,
+               COUNT(*) as record_count
+        FROM budget GROUP BY Department ORDER BY allocated DESC LIMIT 8
+    """, conn)
+    conn.close()
+    result = df.to_dict('records')
+    for r in result:
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
+    return JSONResponse(content=result)
+
+# 15. STATES-WIDE SUMMARY (Public) — for analytics / map view
+@app.get("/api/states-summary")
+async def states_summary():
+    """Get state-wise budget totals - Public access"""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql("""
+        SELECT State,
+               COUNT(DISTINCT District) as district_count,
+               SUM(Allocated_Budget_Cr) as allocated,
+               SUM(Actual_Spending_Cr) as spent,
+               AVG(Utilization_Percentage) as utilization,
+               SUM(CASE WHEN UPPER(Anomaly_Tag) != 'NORMAL' THEN 1 ELSE 0 END) as anomaly_count,
+               AVG(Delay_Days) as avg_delay
+        FROM budget GROUP BY State ORDER BY allocated DESC
+    """, conn)
+    conn.close()
+    result = df.to_dict('records')
+    for r in result:
+        for k, v in r.items():
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v)
     return JSONResponse(content=result)
 
 
