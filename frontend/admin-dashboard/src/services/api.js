@@ -18,7 +18,8 @@ export const api = {
     if (year) p.set("year", year);
     if (state && state !== "All States") p.set("state", state);
     if (district && district !== "All Districts") p.set("district", district);
-    if (department && department !== "All Departments") p.set("department", department);
+    if (department && department !== "All Departments")
+      p.set("department", department);
     return fetchJSON(`/api/dashboard/department-allocation?${p}`);
   },
   getMonthlyTrend: (year, state, district, department) => {
@@ -26,7 +27,8 @@ export const api = {
     if (year) p.set("year", year);
     if (state && state !== "All States") p.set("state", state);
     if (district && district !== "All Districts") p.set("district", district);
-    if (department && department !== "All Departments") p.set("department", department);
+    if (department && department !== "All Departments")
+      p.set("department", department);
     return fetchJSON(`/api/dashboard/monthly-trend?${p}`);
   },
   getStateSummary: () => fetchJSON("/api/dashboard/state-summary"),
@@ -37,7 +39,8 @@ export const api = {
     if (year) p.set("year", year);
     if (state && state !== "All States") p.set("state", state);
     if (district && district !== "All Districts") p.set("district", district);
-    if (department && department !== "All Departments") p.set("department", department);
+    if (department && department !== "All Departments")
+      p.set("department", department);
     return fetchJSON(`/api/dashboard/top-districts?${p}`);
   },
   getLeakageMap: (limit = 24, year, state, district, department) => {
@@ -45,7 +48,8 @@ export const api = {
     if (year) p.set("year", year);
     if (state && state !== "All States") p.set("state", state);
     if (district && district !== "All Districts") p.set("district", district);
-    if (department && department !== "All Departments") p.set("department", department);
+    if (department && department !== "All Departments")
+      p.set("department", department);
     return fetchJSON(`/api/leakage-map?${p}`);
   },
   getSchemes: (state, department) => {
