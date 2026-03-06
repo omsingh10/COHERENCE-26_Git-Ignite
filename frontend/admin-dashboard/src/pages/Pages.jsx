@@ -654,15 +654,17 @@ export const RiskIntelligencePage = ({ mockData }) => {
 
 export const DepartmentAnalyticsPage = ({ mockData }) => {
   const data = usePageData(mockData);
+  const filters = useFilterStore();
   const [deptData, setDeptData] = useState([]);
   const [monthlyData, setMonthlyData] = useState([]);
   const [backendOnline, setBackendOnline] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setLoading(true);
     Promise.all([
-      api.getDepartmentAllocation(),
-      api.getMonthlyTrend(),
+      api.getDepartmentAllocation(filters.year, filters.state, filters.district, filters.department),
+      api.getMonthlyTrend(filters.year, filters.state, filters.district, filters.department),
     ])
       .then(([depts, monthly]) => {
         // Department bar chart data
@@ -697,12 +699,10 @@ export const DepartmentAnalyticsPage = ({ mockData }) => {
         setBackendOnline(true);
       })
       .catch(() => {
-        // Fall back to mock helpers
-        const { groupByDepartment: gbd, groupByMonthForTrend: gbm } = require ? null : null;
         setBackendOnline(false);
       })
       .finally(() => setLoading(false));
-  }, []);
+  }, [filters.year, filters.state, filters.district, filters.department]);
 
   // Mock fallback
   const mockDeptData = (() => {
@@ -749,22 +749,37 @@ export const DepartmentAnalyticsPage = ({ mockData }) => {
 
   return (
     <motion.div variants={pageVariants} initial="hidden" animate="visible" className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <PageHeader
           title="Department Analytics"
           subtitle="Budget allocation and spending deep dive by department"
         />
-        <span
-          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
-            backendOnline ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
-          }`}
-        >
-          {backendOnline ? (
-            <><Wifi size={11} /><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />Live Data</>
-          ) : (
-            <><WifiOff size={11} />Mock Data</>
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Active filter pills */}
+          {filters.year && (
+            <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full text-xs font-semibold">{filters.year}</span>
           )}
-        </span>
+          {filters.state && filters.state !== "All States" && (
+            <span className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">{filters.state}</span>
+          )}
+          {filters.district && filters.district !== "All Districts" && (
+            <span className="px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full text-xs font-semibold">{filters.district}</span>
+          )}
+          {filters.department && filters.department !== "All Departments" && (
+            <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-semibold">{filters.department}</span>
+          )}
+          <span
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
+              backendOnline ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+            }`}
+          >
+            {backendOnline ? (
+              <><Wifi size={11} /><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />Live Data</>
+            ) : (
+              <><WifiOff size={11} />Mock Data</>
+            )}
+          </span>
+        </div>
       </div>
 
       {/* Budget Allocation vs Spending */}

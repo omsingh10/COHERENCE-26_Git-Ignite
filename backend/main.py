@@ -729,52 +729,96 @@ async def dashboard_kpis():
 
 
 @app.get("/api/dashboard/department-allocation")
-async def department_allocation():
-    """Department-wise budget allocation for bar/pie charts"""
+async def department_allocation(
+    year: Optional[int] = None,
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    department: Optional[str] = None,
+):
+    """Department-wise budget allocation for bar/pie charts - supports filters"""
     conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql("""
+    where = []
+    params = []
+    if year:
+        where.append("Year = ?")
+        params.append(year)
+    if state and state.lower() not in ("all", "all states", ""):
+        where.append("State = ?")
+        params.append(state)
+    if district and district.lower() not in ("all", "all districts", ""):
+        where.append("District = ?")
+        params.append(district)
+    if department and department.lower() not in ("all", "all departments", ""):
+        where.append("Department = ?")
+        params.append(department)
+    w = ("WHERE " + " AND ".join(where)) if where else ""
+    df = pd.read_sql(f"""
         SELECT
             Department,
             SUM(Allocated_Budget_Cr) as allocated,
             SUM(Actual_Spending_Cr) as spent,
             AVG(Utilization_Percentage) as utilization,
             COUNT(*) as projects
-        FROM budget
+        FROM budget {w}
         GROUP BY Department
         ORDER BY allocated DESC
-        LIMIT 15
-    """, conn)
+        LIMIT 20
+    """, conn, params=params)
     conn.close()
     result = []
     for r in df.to_dict('records'):
         for k, v in r.items():
             if isinstance(v, (np.integer, np.floating)):
-                r[k] = float(v)
+                r[k] = float(v) if not np.isnan(float(v)) else 0.0
+            elif v is None:
+                r[k] = 0.0
         result.append(r)
     return JSONResponse(content=result)
 
 
 @app.get("/api/dashboard/monthly-trend")
-async def monthly_trend():
-    """Monthly spending trend for line chart"""
+async def monthly_trend(
+    year: Optional[int] = None,
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    department: Optional[str] = None,
+):
+    """Monthly spending trend for line chart - supports filters"""
     conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql("""
+    where = []
+    params = []
+    if year:
+        where.append("Year = ?")
+        params.append(year)
+    if state and state.lower() not in ("all", "all states", ""):
+        where.append("State = ?")
+        params.append(state)
+    if district and district.lower() not in ("all", "all districts", ""):
+        where.append("District = ?")
+        params.append(district)
+    if department and department.lower() not in ("all", "all departments", ""):
+        where.append("Department = ?")
+        params.append(department)
+    w = ("WHERE " + " AND ".join(where)) if where else ""
+    df = pd.read_sql(f"""
         SELECT
             Year,
             Month,
             SUM(Allocated_Budget_Cr) as allocated,
             SUM(Actual_Spending_Cr) as spent
-        FROM budget
+        FROM budget {w}
         GROUP BY Year, Month
         ORDER BY Year, Month
-    """, conn)
+    """, conn, params=params)
     conn.close()
     result = []
     months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
     for r in df.to_dict('records'):
         for k, v in r.items():
             if isinstance(v, (np.integer, np.floating)):
-                r[k] = float(v)
+                r[k] = float(v) if not np.isnan(float(v)) else 0.0
+            elif v is None:
+                r[k] = 0.0
         r['month_name'] = months[int(r['Month']) - 1] if 1 <= int(r['Month']) <= 12 else str(r['Month'])
         result.append(r)
     return JSONResponse(content=result)

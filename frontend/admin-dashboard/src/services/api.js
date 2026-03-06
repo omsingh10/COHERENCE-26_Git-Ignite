@@ -13,9 +13,22 @@ export const api = {
 
   // Dashboard specific
   getKPIs: () => fetchJSON("/api/dashboard/kpis"),
-  getDepartmentAllocation: () =>
-    fetchJSON("/api/dashboard/department-allocation"),
-  getMonthlyTrend: () => fetchJSON("/api/dashboard/monthly-trend"),
+  getDepartmentAllocation: (year, state, district, department) => {
+    const p = new URLSearchParams();
+    if (year) p.set("year", year);
+    if (state && state !== "All States") p.set("state", state);
+    if (district && district !== "All Districts") p.set("district", district);
+    if (department && department !== "All Departments") p.set("department", department);
+    return fetchJSON(`/api/dashboard/department-allocation?${p}`);
+  },
+  getMonthlyTrend: (year, state, district, department) => {
+    const p = new URLSearchParams();
+    if (year) p.set("year", year);
+    if (state && state !== "All States") p.set("state", state);
+    if (district && district !== "All Districts") p.set("district", district);
+    if (department && department !== "All Departments") p.set("department", department);
+    return fetchJSON(`/api/dashboard/monthly-trend?${p}`);
+  },
   getStateSummary: () => fetchJSON("/api/dashboard/state-summary"),
   getAnomaliesList: (limit = 20) =>
     fetchJSON(`/api/dashboard/anomalies-list?limit=${limit}`),
