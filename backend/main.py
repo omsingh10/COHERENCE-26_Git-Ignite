@@ -95,7 +95,7 @@ def init_auth_db():
     
     conn.commit()
     conn.close()
-    print("✅ Auth database initialized with demo users")
+    print("[OK] Auth database initialized with demo users")
 
 # Password utilities
 def verify_password(plain_password, hashed_password):
@@ -1429,8 +1429,8 @@ from google.genai import types as genai_types
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-_genai_client = genai.Client(api_key=GEMINI_API_KEY)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+_genai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 class ChatRequest(BaseModel):
     message: str
@@ -1463,6 +1463,8 @@ Answer clearly and concisely. Use Rs for currency. Keep responses under 300 word
 
 @app.post("/api/chat")
 async def budget_chat(req: ChatRequest):
+    if not _genai_client:
+        raise HTTPException(status_code=503, detail="Budget AI is not configured (GEMINI_API_KEY missing).")
     try:
         system_prompt = _budget_system_prompt()
         # Build history in google.genai format
@@ -1495,12 +1497,12 @@ async def startup_event():
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 Starting Indian Budget Intelligence API...")
-    print("📊 Database:", DB_PATH)
-    print("📝 API docs: http://localhost:8000/docs")
-    print("🔑 Auth endpoint: http://localhost:8000/token")
-    print("📍 Working directory:", os.getcwd())
-    print("\n👤 Demo Users (password: admin123 for all):")
+    print("[START] Starting Indian Budget Intelligence API...")
+    print("[INFO] Database:", DB_PATH)
+    print("[INFO] API docs: http://localhost:8000/docs")
+    print("[INFO] Auth endpoint: http://localhost:8000/token")
+    print("[INFO] Working directory:", os.getcwd())
+    print("\n[INFO] Demo Users (password: admin123 for all):")
     print("   - admin (full access)")
     print("   - health_dept (health department only)")
     print("   - education_dept (education department only)")
