@@ -1,7 +1,8 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Search, Bell, Calendar, ChevronDown, User } from "lucide-react";
+import { Search, Bell } from "lucide-react";
 import { useFilterStore } from "../hooks/store";
+import { api } from "../services/api";
 
 const Header = ({ mockData }) => {
   const {
@@ -15,16 +16,33 @@ const Header = ({ mockData }) => {
     setDepartment,
   } = useFilterStore();
 
-  const states = [...new Set(mockData.map((d) => d.state))].sort();
-  const districts = state
-    ? [
-        ...new Set(
-          mockData.filter((d) => d.state === state).map((d) => d.district),
-        ),
-      ].sort()
-    : [];
-  const departments = [...new Set(mockData.map((d) => d.department))].sort();
-  const years = [...new Set(mockData.map((d) => d.year))].sort().reverse();
+  const [states, setStates] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [years] = useState([2024, 2023, 2022, 2021]);
+
+  // Load states and departments from backend on mount
+  useEffect(() => {
+    api.getStates()
+      .then((r) => setStates((r.states || []).sort()))
+      .catch(() => setStates([...new Set(mockData.map((d) => d.state))].sort()));
+    api.getDepartments()
+      .then((r) => setDepartments((r.departments || []).sort()))
+      .catch(() => setDepartments([...new Set(mockData.map((d) => d.department))].sort()));
+  }, []);
+
+  // Load districts from backend whenever state changes
+  useEffect(() => {
+    setDistricts([]);
+    if (!state) return;
+    api.getDistricts(state)
+      .then((r) => setDistricts((r.districts || []).sort()))
+      .catch(() => {
+        const fallback = mockData.filter((d) => d.state === state).map((d) => d.district);
+        setDistricts([...new Set(fallback)].sort());
+      });
+    setDistrict(null); // reset district when state changes
+  }, [state]);
 
   return (
     <motion.header
