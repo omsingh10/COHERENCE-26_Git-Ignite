@@ -491,10 +491,12 @@ class _MainShellState extends State<MainShell> {
       ]);
       if (!mounted) return;
       setState(() {
-        if (results[0].statusCode == 200)
+        if (results[0].statusCode == 200) {
           summary = json.decode(results[0].body);
-        if (results[1].statusCode == 200)
+        }
+        if (results[1].statusCode == 200) {
           deptSummary = json.decode(results[1].body) as List;
+        }
         dataLoaded = true;
       });
     } catch (_) {
@@ -2713,8 +2715,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final r = await http
           .get(Uri.parse('$kBaseUrl/api/health'))
           .timeout(const Duration(seconds: 5));
-      if (mounted && r.statusCode == 200)
+      if (mounted && r.statusCode == 200) {
         setState(() => _health = json.decode(r.body));
+      }
     } catch (_) {}
   }
 
