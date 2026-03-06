@@ -42,39 +42,9 @@ export const DashboardOverview = ({ mockData, backendData, backendStats, isBacke
     setTimeout(() => setAnalysisLoading(false), 2000);
   };
 
+  // Always use mock-format data for charts/panels — they rely on helper
+  // functions (groupByDepartment, groupByMonthForTrend) that expect mock fields
   const activeData = filteredData.length > 0 ? filteredData : mockData;
-
-  // Build chart-compatible data from backend if available
-  const deptChartData = backendData?.deptAlloc
-    ? backendData.deptAlloc.map((d) => ({
-        department: d.Department,
-        allocated_budget: d.allocated,
-        spent_budget: d.spent,
-        utilization_rate: d.utilization,
-      }))
-    : activeData;
-
-  const monthlyChartData = backendData?.monthlyTrend
-    ? backendData.monthlyTrend.map((d) => ({
-        month: d.month_name,
-        year: d.Year,
-        allocated_budget: d.allocated,
-        spent_budget: d.spent,
-      }))
-    : activeData;
-
-  const anomalyData = backendData?.anomalies
-    ? backendData.anomalies.map((d) => ({
-        district: d.District,
-        state: d.State,
-        department: d.Department,
-        allocated_budget: d.Allocated_Budget_Cr,
-        spent_budget: d.Actual_Spending_Cr,
-        utilization_rate: d.Utilization_Percentage,
-        anomaly_flag: d.Anomaly_Tag !== "Normal" ? d.Anomaly_Tag : "NONE",
-        risk_score: d.Delay_Days > 90 ? 80 : d.Utilization_Percentage < 30 ? 75 : 40,
-      }))
-    : activeData;
 
   return (
     <div className="space-y-6">
@@ -114,21 +84,21 @@ export const DashboardOverview = ({ mockData, backendData, backendStats, isBacke
 
       {/* Charts Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <BudgetAllocationChart data={deptChartData} />
-        <SpendingEfficiencyChart data={deptChartData} />
+        <BudgetAllocationChart data={activeData} />
+        <SpendingEfficiencyChart data={activeData} />
       </div>
 
       {/* Monthly Trend */}
-      <MonthlySpendinTrendChart data={monthlyChartData} />
+      <MonthlySpendinTrendChart data={activeData} />
 
       {/* Anomalies and Lapse Predictor */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        <AnomalyDetectionPanel data={anomalyData} />
+        <AnomalyDetectionPanel data={activeData} />
         <FundLapsePredictorPanel data={activeData} />
       </div>
 
       {/* Risk Ranking */}
-      <RiskIntelligenceRanking data={anomalyData} />
+      <RiskIntelligenceRanking data={activeData} />
 
       {/* Budget GPT */}
       <BudgetGPT data={activeData} />
