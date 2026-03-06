@@ -97,4 +97,67 @@ export const api = {
     if (year) p.set("year", year);
     return fetchJSON(`/api/flow/projects?${p}`);
   },
+
+  // CSV Upload
+  uploadCSV: async (file) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE_URL}/api/upload-csv`, {
+      method: "POST",
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Upload failed (${res.status})`);
+    }
+    return res.json();
+  },
+  getTemplateColumns: () => fetchJSON("/api/upload/template-columns"),
+
+  // Advanced Anomaly Detection
+  getAnomalyDetection: (
+    year,
+    state,
+    district,
+    department,
+    sensitivity = 0.1,
+  ) => {
+    const p = new URLSearchParams();
+    if (year) p.set("year", year);
+    if (state && state !== "All States") p.set("state", state);
+    if (district && district !== "All Districts") p.set("district", district);
+    if (department && department !== "All Departments")
+      p.set("department", department);
+    if (sensitivity !== 0.1) p.set("sensitivity", sensitivity);
+    return fetchJSON(`/api/analytics/anomaly-detection?${p}`);
+  },
+
+  // Predictive Modeling - Fund Lapse
+  getFundLapsePrediction: (
+    year,
+    state,
+    district,
+    department,
+    forecastMonths = 3,
+  ) => {
+    const p = new URLSearchParams();
+    if (year) p.set("year", year);
+    if (state && state !== "All States") p.set("state", state);
+    if (district && district !== "All Districts") p.set("district", district);
+    if (department && department !== "All Departments")
+      p.set("department", department);
+    if (forecastMonths !== 3) p.set("forecast_months", forecastMonths);
+    return fetchJSON(`/api/analytics/fund-lapse-prediction?${p}`);
+  },
+
+  // Smart Reallocation
+  getSmartReallocation: (year, state, district, department) => {
+    const p = new URLSearchParams();
+    if (year) p.set("year", year);
+    if (state && state !== "All States") p.set("state", state);
+    if (district && district !== "All Districts") p.set("district", district);
+    if (department && department !== "All Departments")
+      p.set("department", department);
+    return fetchJSON(`/api/analytics/smart-reallocation?${p}`);
+  },
 };

@@ -14,6 +14,8 @@ import {
   Home,
   ChevronRight,
   ChevronLeft,
+  Upload,
+  Shield,
 } from "lucide-react";
 import { useDashboardStore } from "../hooks/store";
 
@@ -26,13 +28,14 @@ const Sidebar = ({ onPageChange }) => {
     { id: "departments", label: "Department Analytics", icon: PieChart },
     { id: "districts", label: "District Analytics", icon: Map },
     { id: "leakage", label: "LeakageMap", icon: AlertCircle },
-    { id: "anomaly", label: "Anomaly Detection", icon: TrendingUp },
+    { id: "anomaly", label: "Anomaly Detection", icon: Shield },
     { id: "spending", label: "Spending Behavior", icon: Activity },
     { id: "lapse", label: "Fund Lapse Predictor", icon: Zap },
     { id: "reallocation", label: "Smart Reallocation", icon: Settings },
     { id: "gpt", label: "Budget GPT", icon: Brain },
     { id: "risk", label: "Risk Intelligence", icon: AlertCircle },
     { id: "explorer", label: "Data Explorer", icon: Database },
+    { id: "upload", label: "Upload Data", icon: Upload },
   ];
 
   return (
