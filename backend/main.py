@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from typing import Optional, List
 import asyncio
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from pydantic import BaseModel
 import sqlite3
 import pandas as pd
@@ -25,7 +25,6 @@ SECRET_KEY = "vQOONJ_H8PA7IRaUJxNS1sdwLdx8vvJIqHu3u_auC_o"
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # Pydantic models for auth
@@ -81,15 +80,15 @@ def init_auth_db():
     ''')
     
     # Insert demo users (password: admin123 for all)
-    # Hash for 'admin123' - generated with pwd_context.hash("admin123")
+    demo_hash = bcrypt.hashpw(b"admin123", bcrypt.gensalt()).decode("utf-8")
     cursor.execute('''
         INSERT OR IGNORE INTO users (username, email, full_name, hashed_password, role, department)
         VALUES 
-        ('admin', 'admin@gov.in', 'Admin User', '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'admin', NULL),
-        ('health_dept', 'health@gov.in', 'Health Officer', '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'department', 'Health'),
-        ('education_dept', 'education@gov.in', 'Education Officer', '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'department', 'Education'),
-        ('public_user', 'public@citizen.in', 'Public User', '$2b$12$EixZaYVK1fsbw1ZfbX3OXePaWxn96p36WQoeG6Lruj3vjPGga31lW', 'public', NULL)
-    ''')
+        (?, 'admin@gov.in', 'Admin User', ?, 'admin', NULL),
+        (?, 'health@gov.in', 'Health Officer', ?, 'department', 'Health'),
+        (?, 'education@gov.in', 'Education Officer', ?, 'department', 'Education'),
+        (?, 'public@citizen.in', 'Public User', ?, 'public', NULL)
+    ''', ('admin', demo_hash, 'health_dept', demo_hash, 'education_dept', demo_hash, 'public_user', demo_hash))
     
     conn.commit()
     conn.close()
@@ -97,10 +96,10 @@ def init_auth_db():
 
 # Password utilities
 def verify_password(plain_password, hashed_password):
-    return pwd_context.verify(plain_password, hashed_password)
+    return bcrypt.checkpw(plain_password.encode("utf-8"), hashed_password.encode("utf-8"))
 
 def get_password_hash(password):
-    return pwd_context.hash(password)
+    return bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
 
 def get_user(username: str):
     conn = sqlite3.connect(DB_PATH)
