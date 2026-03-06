@@ -9,6 +9,9 @@ import {
   Tooltip as RechartsTooltip,
   Cell,
   ResponsiveContainer,
+  AreaChart,
+  Area,
+  Legend,
 } from "recharts";
 import { api } from "../services/api";
 import {
@@ -651,23 +654,262 @@ export const RiskIntelligencePage = ({ mockData }) => {
 
 export const DepartmentAnalyticsPage = ({ mockData }) => {
   const data = usePageData(mockData);
+  const [deptData, setDeptData] = useState([]);
+  const [monthlyData, setMonthlyData] = useState([]);
+  const [backendOnline, setBackendOnline] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      api.getDepartmentAllocation(),
+      api.getMonthlyTrend(),
+    ])
+      .then(([depts, monthly]) => {
+        // Department bar chart data
+        const deptChart = depts.map((d) => ({
+          name: d.Department || d.name || "",
+          allocated: Math.round((d.allocated || 0)),
+          spent: Math.round((d.spent || 0)),
+          utilization: Math.round(d.utilization || 0),
+          projects: d.projects || 0,
+        }));
+        setDeptData(deptChart);
+
+        // Monthly trend: aggregate by month number (1-12), sum across years
+        const monthMap = {};
+        const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        monthly.forEach((m) => {
+          const mn = parseInt(m.Month || 0);
+          if (mn < 1 || mn > 12) return;
+          if (!monthMap[mn]) monthMap[mn] = { month: monthNames[mn - 1], spending: 0, allocated: 0, count: 0 };
+          monthMap[mn].spending += (m.spent || 0);
+          monthMap[mn].allocated += (m.allocated || 0);
+          monthMap[mn].count++;
+        });
+        const monthChart = Array.from({ length: 12 }, (_, i) => {
+          const entry = monthMap[i + 1] || { month: monthNames[i], spending: 0, allocated: 0, count: 0 };
+          return {
+            month: entry.month,
+            avgSpending: entry.count > 0 ? Math.round((entry.spending / entry.count) * 10) / 10 : 0,
+          };
+        });
+        setMonthlyData(monthChart);
+        setBackendOnline(true);
+      })
+      .catch(() => {
+        // Fall back to mock helpers
+        const { groupByDepartment: gbd, groupByMonthForTrend: gbm } = require ? null : null;
+        setBackendOnline(false);
+      })
+      .finally(() => setLoading(false));
+  }, []);
+
+  // Mock fallback
+  const mockDeptData = (() => {
+    const grouped = {};
+    data.forEach((r) => {
+      if (!grouped[r.department]) grouped[r.department] = { name: r.department, allocated: 0, spent: 0 };
+      grouped[r.department].allocated += r.allocated_budget;
+      grouped[r.department].spent += r.spent_budget;
+    });
+    return Object.values(grouped);
+  })();
+
+  const mockMonthlyData = (() => {
+    const monthNames = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const monthMap = {};
+    monthNames.forEach((m, i) => { monthMap[i] = { month: m, spending: 0, count: 0 }; });
+    data.forEach((r) => {
+      if (r.monthly_breakdown) {
+        r.monthly_breakdown.forEach((mb) => {
+          if (monthMap[mb.month - 1]) {
+            monthMap[mb.month - 1].spending += mb.spending;
+            monthMap[mb.month - 1].count++;
+          }
+        });
+      }
+    });
+    return Object.values(monthMap).map((m) => ({
+      month: m.month,
+      avgSpending: Math.round((m.spending / Math.max(m.count, 1)) * 10) / 10,
+    }));
+  })();
+
+  const finalDeptData = backendOnline && deptData.length > 0 ? deptData : mockDeptData;
+  const finalMonthlyData = backendOnline && monthlyData.length > 0 ? monthlyData : mockMonthlyData;
+
+  const tooltipStyle = {
+    backgroundColor: "#fff",
+    border: "1px solid #fed7aa",
+    borderRadius: "12px",
+    boxShadow: "0 4px 12px rgba(0,0,0,0.06)",
+    padding: "10px 14px",
+    fontSize: "13px",
+  };
+
   return (
-    <motion.div
-      variants={pageVariants}
-      initial="hidden"
-      animate="visible"
-      className="space-y-6"
-    >
-      <PageHeader
-        title="Department Analytics"
-        subtitle="Budget allocation and spending deep dive"
-      />
-      <motion.div variants={itemVariants}>
-        <BudgetAllocationChart data={data} />
+    <motion.div variants={pageVariants} initial="hidden" animate="visible" className="space-y-6">
+      <div className="flex items-center justify-between">
+        <PageHeader
+          title="Department Analytics"
+          subtitle="Budget allocation and spending deep dive by department"
+        />
+        <span
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold ${
+            backendOnline ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"
+          }`}
+        >
+          {backendOnline ? (
+            <><Wifi size={11} /><span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />Live Data</>
+          ) : (
+            <><WifiOff size={11} />Mock Data</>
+          )}
+        </span>
+      </div>
+
+      {/* Budget Allocation vs Spending */}
+      <motion.div
+        variants={itemVariants}
+        className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm"
+      >
+        <h2 className="text-base font-semibold mb-5 text-gray-800">Budget Allocation vs Spending</h2>
+        {loading ? (
+          <div className="h-[300px] flex items-center justify-center text-gray-400 text-sm">Loading...</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <ReBarChart data={finalDeptData} barGap={4} barCategoryGap="30%">
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis
+                dataKey="name"
+                tick={{ fontSize: 12, fill: "#6b7280" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 12, fill: "#6b7280" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => {
+                  if (v >= 10000) return `${(v/10000).toFixed(0)}Cr`;
+                  if (v >= 100) return `${(v/100).toFixed(0)}L`;
+                  return v;
+                }}
+              />
+              <RechartsTooltip
+                contentStyle={tooltipStyle}
+                formatter={(value, name) => [
+                  value >= 10000 ? `₹${(value/10000).toFixed(1)}Cr` : value >= 100 ? `₹${(value/100).toFixed(1)}L` : `₹${value}`,
+                  name,
+                ]}
+                cursor={{ fill: "rgba(249, 115, 22, 0.04)" }}
+              />
+              <Legend wrapperStyle={{ paddingTop: "16px", fontSize: "13px" }} />
+              <Bar dataKey="allocated" fill="#f97316" name="Allocated" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="spent" fill="#22c55e" name="Spent" radius={[6, 6, 0, 0]} />
+            </ReBarChart>
+          </ResponsiveContainer>
+        )}
       </motion.div>
-      <motion.div variants={itemVariants}>
-        <MonthlySpendinTrendChart data={data} />
+
+      {/* Monthly Spending Trend */}
+      <motion.div
+        variants={itemVariants}
+        className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm"
+      >
+        <h2 className="text-base font-semibold mb-5 text-gray-800">Monthly Spending Trend</h2>
+        {loading ? (
+          <div className="h-[300px] flex items-center justify-center text-gray-400 text-sm">Loading...</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={300}>
+            <AreaChart data={finalMonthlyData}>
+              <defs>
+                <linearGradient id="deptSpendingGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f97316" stopOpacity={0.25} />
+                  <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+              <XAxis
+                dataKey="month"
+                tick={{ fontSize: 12, fill: "#6b7280" }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                tick={{ fontSize: 12, fill: "#6b7280" }}
+                axisLine={false}
+                tickLine={false}
+                tickFormatter={(v) => {
+                  if (v >= 10000) return `${(v/10000).toFixed(1)}Cr`;
+                  if (v >= 100) return `${(v/100).toFixed(0)}L`;
+                  return v;
+                }}
+              />
+              <RechartsTooltip
+                contentStyle={tooltipStyle}
+                formatter={(value) => [
+                  value >= 10000 ? `₹${(value/10000).toFixed(1)}Cr` : value >= 100 ? `₹${(value/100).toFixed(1)}L` : `₹${value}`,
+                  "Avg Spending",
+                ]}
+              />
+              <Area
+                type="monotone"
+                dataKey="avgSpending"
+                stroke="#f97316"
+                strokeWidth={2.5}
+                fillOpacity={1}
+                fill="url(#deptSpendingGrad)"
+                name="Average Spending"
+                dot={{ r: 3.5, fill: "#f97316", strokeWidth: 0 }}
+                activeDot={{ r: 5, fill: "#ea580c", stroke: "#fff", strokeWidth: 2 }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
       </motion.div>
+
+      {/* Department Summary Table */}
+      {backendOnline && deptData.length > 0 && (
+        <motion.div
+          variants={itemVariants}
+          className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm"
+        >
+          <h2 className="text-base font-semibold mb-5 text-gray-800">Department Summary</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-gray-100">
+                  <th className="pb-3 text-left text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Department</th>
+                  <th className="pb-3 text-right text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Allocated</th>
+                  <th className="pb-3 text-right text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Spent</th>
+                  <th className="pb-3 text-right text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Utilization</th>
+                  <th className="pb-3 text-right text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Projects</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deptData.map((d, i) => (
+                  <tr key={i} className="border-b border-gray-50 hover:bg-orange-50/20 transition-colors">
+                    <td className="py-3 font-medium text-gray-800">{d.name}</td>
+                    <td className="py-3 text-right text-orange-600 font-medium">
+                      {d.allocated >= 10000 ? `₹${(d.allocated/10000).toFixed(1)}Cr` : `₹${d.allocated}`}
+                    </td>
+                    <td className="py-3 text-right text-green-600 font-medium">
+                      {d.spent >= 10000 ? `₹${(d.spent/10000).toFixed(1)}Cr` : `₹${d.spent}`}
+                    </td>
+                    <td className="py-3 text-right">
+                      <span className={`font-semibold ${
+                        d.utilization >= 85 ? "text-green-500" :
+                        d.utilization >= 50 ? "text-amber-500" : "text-red-500"
+                      }`}>{d.utilization}%</span>
+                    </td>
+                    <td className="py-3 text-right text-gray-500">{d.projects}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </motion.div>
+      )}
     </motion.div>
   );
 };
