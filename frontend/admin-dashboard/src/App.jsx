@@ -16,6 +16,9 @@ import {
   BudgetFlowTrackerPage,
   DistrictAnalyticsPage,
 } from "./pages/Pages";
+import CSVUploadPage from "./pages/CSVUploadPage";
+import AnomalyDetectionDashboard from "./pages/AnomalyDetectionDashboard";
+import PredictiveModelingDashboard from "./pages/PredictiveModelingDashboard";
 import { useDashboardStore } from "./hooks/store";
 import { generateMockData } from "./data/mockData";
 import { useBackendData } from "./hooks/useBackendData";
@@ -33,13 +36,14 @@ function App() {
     departments: <DepartmentAnalyticsPage mockData={mockData} backendData={backendData} />,
     districts: <DistrictAnalyticsPage mockData={mockData} backendData={backendData} />,
     leakage: <LeakageMapPage />,
-    anomaly: <AnomalyDetectionPage mockData={mockData} backendData={backendData} />,
+    anomaly: <AnomalyDetectionDashboard />,
     spending: <SpendingBehaviorPage mockData={mockData} backendData={backendData} />,
-    lapse: <LapsePredictorPage mockData={mockData} backendData={backendData} />,
+    lapse: <PredictiveModelingDashboard />,
     reallocation: <SmartReallocationPage mockData={mockData} backendData={backendData} />,
     gpt: <BudgetGPTPage mockData={mockData} backendData={backendData} />,
     risk: <RiskIntelligencePage mockData={mockData} backendData={backendData} />,
     explorer: <DataExplorerPage mockData={mockData} backendData={backendData} />,
+    upload: <CSVUploadPage />,
   };
 
   return (

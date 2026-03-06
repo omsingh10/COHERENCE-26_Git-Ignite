@@ -95,7 +95,7 @@ def init_auth_db():
     
     conn.commit()
     conn.close()
-    print("✅ Auth database initialized with demo users")
+    print("[OK] Auth database initialized with demo users")
 
 # Password utilities
 def verify_password(plain_password, hashed_password):
@@ -1429,8 +1429,8 @@ from google.genai import types as genai_types
 from dotenv import load_dotenv
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-GEMINI_API_KEY = os.environ["GEMINI_API_KEY"]
-_genai_client = genai.Client(api_key=GEMINI_API_KEY)
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+_genai_client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 class ChatRequest(BaseModel):
     message: str
@@ -1463,6 +1463,8 @@ Answer clearly and concisely. Use Rs for currency. Keep responses under 300 word
 
 @app.post("/api/chat")
 async def budget_chat(req: ChatRequest):
+    if not _genai_client:
+        raise HTTPException(status_code=503, detail="Budget AI is not configured (GEMINI_API_KEY missing).")
     try:
         system_prompt = _budget_system_prompt()
         # Build history in google.genai format
@@ -1488,6 +1490,518 @@ async def budget_chat(req: ChatRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ============ CSV UPLOAD ENDPOINT ============
+from fastapi import UploadFile, File
+import io
+import csv as csv_module
+
+REQUIRED_COLUMNS = [
+    "Year", "Quarter", "Month", "State", "District", "Ministry", "Department",
+    "Scheme_Name", "Project_ID", "Administrative_Level",
+    "Allocated_Budget_Cr", "Revised_Budget_Cr", "Actual_Spending_Cr",
+    "Remaining_Budget_Cr", "Utilization_Percentage",
+    "Population_Covered", "Beneficiary_Count", "Spending_Category",
+    "Payment_Method", "Approval_Date", "Fund_Release_Date",
+    "Last_Transaction_Date", "Fiscal_Year", "Spending_Phase",
+    "District_Development_Index", "Economic_Priority_Level",
+    "Delay_Days", "Anomaly_Tag"
+]
+
+@app.post("/api/upload-csv")
+async def upload_csv(file: UploadFile = File(...)):
+    """Upload a CSV file to add/replace budget data in the database."""
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Only .csv files are accepted.")
+
+    try:
+        contents = await file.read()
+        text = contents.decode("utf-8-sig")
+        df = pd.read_csv(io.StringIO(text))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Could not parse CSV: {e}")
+
+    # Validate columns
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Missing required columns: {missing}. Required: {REQUIRED_COLUMNS}"
+        )
+
+    # Clean and type-cast
+    numeric_cols = [
+        "Year", "Month", "Allocated_Budget_Cr", "Revised_Budget_Cr",
+        "Actual_Spending_Cr", "Remaining_Budget_Cr", "Utilization_Percentage",
+        "Population_Covered", "Beneficiary_Count",
+        "District_Development_Index", "Delay_Days"
+    ]
+    for col in numeric_cols:
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    df = df.dropna(subset=["Year", "State", "District", "Department", "Allocated_Budget_Cr"])
+    rows_before = len(df)
+
+    conn = sqlite3.connect(DB_PATH)
+    df[REQUIRED_COLUMNS].to_sql("budget", conn, if_exists="append", index=False)
+    conn.close()
+
+    return {
+        "status": "success",
+        "rows_added": rows_before,
+        "columns": list(df.columns),
+        "preview": json.loads(df.head(5).to_json(orient="records"))
+    }
+
+
+@app.get("/api/upload/template-columns")
+async def get_template_columns():
+    """Return the required CSV column names for upload."""
+    return {"columns": REQUIRED_COLUMNS}
+
+
+# ============ ADVANCED ANOMALY DETECTION ============
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import IsolationForest as IsolationForestModel
+
+@app.get("/api/analytics/anomaly-detection")
+async def anomaly_detection_api(
+    year: Optional[int] = None,
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    department: Optional[str] = None,
+    sensitivity: float = Query(0.1, ge=0.01, le=0.5, description="Contamination factor for IsolationForest (lower = fewer anomalies)")
+):
+    """
+    Multi-method anomaly detection:
+    1. Isolation Forest (ML-based unsupervised)
+    2. Z-Score statistical outliers
+    3. Rule-based flags (high delay, extreme utilization, etc.)
+    
+    Returns scored and categorized anomalies with explanations.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    query = "SELECT * FROM budget WHERE 1=1"
+    params = []
+    if year:
+        query += " AND Year = ?"; params.append(year)
+    if state:
+        query += " AND State = ?"; params.append(state)
+    if district:
+        query += " AND District = ?"; params.append(district)
+    if department:
+        query += " AND Department = ?"; params.append(department)
+    
+    df = pd.read_sql_query(query, conn, params=params)
+    conn.close()
+
+    if df.empty:
+        return {"anomalies": [], "summary": {}, "distribution": {}}
+
+    # --- Feature Engineering ---
+    features = df[["Allocated_Budget_Cr", "Actual_Spending_Cr", "Utilization_Percentage", "Delay_Days"]].copy()
+    features["spend_ratio"] = (df["Actual_Spending_Cr"] / df["Allocated_Budget_Cr"].replace(0, np.nan)).fillna(0)
+    features["delay_severity"] = df["Delay_Days"] / (df["Delay_Days"].max() or 1)
+    features["budget_gap"] = df["Allocated_Budget_Cr"] - df["Actual_Spending_Cr"]
+    features = features.fillna(0)
+
+    # --- Method 1: Isolation Forest ---
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(features)
+    iso_model = IsolationForestModel(contamination=sensitivity, random_state=42, n_estimators=100)
+    df["iso_anomaly"] = iso_model.fit_predict(X_scaled)
+    df["iso_score"] = -iso_model.score_samples(X_scaled)  # Higher = more anomalous
+
+    # --- Method 2: Z-Score ---
+    z_scores = np.abs((features - features.mean()) / features.std().replace(0, 1))
+    df["z_max"] = z_scores.max(axis=1)
+    df["z_anomaly"] = (df["z_max"] > 2.5).astype(int)
+
+    # --- Method 3: Rule-based ---
+    df["rule_flags"] = 0
+    df["rule_reasons"] = ""
+    reasons_list = []
+    for idx in df.index:
+        reasons = []
+        util = df.loc[idx, "Utilization_Percentage"]
+        delay = df.loc[idx, "Delay_Days"]
+        spend_ratio = features.loc[idx, "spend_ratio"]
+        
+        if util > 110:
+            df.loc[idx, "rule_flags"] += 1
+            reasons.append("Overspending (>110% utilization)")
+        if util < 30:
+            df.loc[idx, "rule_flags"] += 1
+            reasons.append("Severe underutilization (<30%)")
+        if delay > 60:
+            df.loc[idx, "rule_flags"] += 1
+            reasons.append(f"Excessive delay ({delay} days)")
+        if spend_ratio > 1.2:
+            df.loc[idx, "rule_flags"] += 1
+            reasons.append("Spending exceeds allocation by >20%")
+        if spend_ratio < 0.2 and df.loc[idx, "Allocated_Budget_Cr"] > 100:
+            df.loc[idx, "rule_flags"] += 1
+            reasons.append("Very low spend on large budget (<20%)")
+        reasons_list.append("; ".join(reasons) if reasons else "Normal")
+    df["rule_reasons"] = reasons_list
+
+    # --- Composite Score ---
+    # Normalize iso_score to 0-100
+    iso_min, iso_max = df["iso_score"].min(), df["iso_score"].max()
+    df["iso_norm"] = ((df["iso_score"] - iso_min) / ((iso_max - iso_min) or 1)) * 100
+    # Normalize z_max to 0-100
+    z_min, z_max_val = df["z_max"].min(), df["z_max"].max()
+    df["z_norm"] = ((df["z_max"] - z_min) / ((z_max_val - z_min) or 1)) * 100
+    # Rule score: each flag = 20 points
+    df["rule_norm"] = (df["rule_flags"] * 20).clip(upper=100)
+
+    # Weighted composite: 40% isolation forest, 30% z-score, 30% rules
+    df["anomaly_score"] = (0.4 * df["iso_norm"] + 0.3 * df["z_norm"] + 0.3 * df["rule_norm"]).round(1)
+
+    # Severity classification
+    df["severity"] = pd.cut(
+        df["anomaly_score"],
+        bins=[-1, 30, 55, 75, 101],
+        labels=["NORMAL", "LOW", "MEDIUM", "HIGH"]
+    )
+
+    # Is anomaly: any method flagged it
+    df["is_anomaly"] = ((df["iso_anomaly"] == -1) | (df["z_anomaly"] == 1) | (df["rule_flags"] > 0)).astype(int)
+
+    # Sort by anomaly score descending
+    anomalies_df = df.sort_values("anomaly_score", ascending=False)
+
+    # Build result rows
+    anomaly_records = []
+    for _, row in anomalies_df.head(100).iterrows():
+        anomaly_records.append({
+            "Project_ID": row.get("Project_ID", ""),
+            "Year": int(row["Year"]),
+            "State": row["State"],
+            "District": row["District"],
+            "Department": row["Department"],
+            "Scheme_Name": row.get("Scheme_Name", ""),
+            "Allocated": round(float(row["Allocated_Budget_Cr"]), 2),
+            "Spent": round(float(row["Actual_Spending_Cr"]), 2),
+            "Utilization": round(float(row["Utilization_Percentage"]), 1),
+            "Delay_Days": int(row["Delay_Days"]),
+            "anomaly_score": float(row["anomaly_score"]),
+            "severity": str(row["severity"]),
+            "is_anomaly": int(row["is_anomaly"]),
+            "detection_methods": {
+                "isolation_forest": bool(row["iso_anomaly"] == -1),
+                "z_score": bool(row["z_anomaly"] == 1),
+                "rule_based": bool(row["rule_flags"] > 0)
+            },
+            "reasons": row["rule_reasons"],
+            "iso_score": round(float(row["iso_norm"]), 1),
+            "z_score": round(float(row["z_norm"]), 1),
+            "rule_score": round(float(row["rule_norm"]), 1)
+        })
+
+    # Summary stats
+    total = len(df)
+    n_anomalies = int(df["is_anomaly"].sum())
+    severity_counts = df["severity"].value_counts().to_dict()
+    severity_counts = {str(k): int(v) for k, v in severity_counts.items()}
+
+    # Distribution by department
+    dept_dist = df.groupby("Department").agg(
+        total=("is_anomaly", "count"),
+        anomalies=("is_anomaly", "sum"),
+        avg_score=("anomaly_score", "mean")
+    ).reset_index()
+    dept_dist["anomaly_rate"] = (dept_dist["anomalies"] / dept_dist["total"] * 100).round(1)
+    dept_distribution = dept_dist.sort_values("anomaly_rate", ascending=False).to_dict(orient="records")
+
+    # Distribution by state
+    state_dist = df.groupby("State").agg(
+        total=("is_anomaly", "count"),
+        anomalies=("is_anomaly", "sum"),
+        avg_score=("anomaly_score", "mean")
+    ).reset_index()
+    state_dist["anomaly_rate"] = (state_dist["anomalies"] / state_dist["total"] * 100).round(1)
+    state_distribution = state_dist.sort_values("anomaly_rate", ascending=False).to_dict(orient="records")
+
+    # Method comparison
+    method_comparison = {
+        "isolation_forest": int((df["iso_anomaly"] == -1).sum()),
+        "z_score": int(df["z_anomaly"].sum()),
+        "rule_based": int((df["rule_flags"] > 0).sum()),
+        "all_methods_agree": int(((df["iso_anomaly"] == -1) & (df["z_anomaly"] == 1) & (df["rule_flags"] > 0)).sum())
+    }
+
+    # Score histogram 
+    hist_bins = [0, 20, 40, 60, 80, 100]
+    hist_labels = ["0-20", "20-40", "40-60", "60-80", "80-100"]
+    score_histogram = []
+    for i in range(len(hist_bins) - 1):
+        count = int(((df["anomaly_score"] >= hist_bins[i]) & (df["anomaly_score"] < hist_bins[i+1])).sum())
+        score_histogram.append({"range": hist_labels[i], "count": count})
+
+    return {
+        "anomalies": anomaly_records,
+        "summary": {
+            "total_records": total,
+            "total_anomalies": n_anomalies,
+            "anomaly_rate": round(n_anomalies / total * 100, 1) if total else 0,
+            "avg_anomaly_score": round(float(df["anomaly_score"].mean()), 1),
+            "severity_distribution": severity_counts,
+            "method_comparison": method_comparison
+        },
+        "by_department": dept_distribution,
+        "by_state": state_distribution,
+        "score_histogram": score_histogram
+    }
+
+
+# ============ PREDICTIVE MODELING: FUND LAPSE PREDICTION ============
+from sklearn.linear_model import LinearRegression
+
+@app.get("/api/analytics/fund-lapse-prediction")
+async def fund_lapse_prediction_api(
+    year: Optional[int] = None,
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    department: Optional[str] = None,
+    forecast_months: int = Query(3, ge=1, le=12, description="Months ahead to forecast")
+):
+    """
+    Predictive model for fund lapse risk:
+    1. Trend analysis on monthly spending patterns
+    2. Linear regression to project year-end utilization
+    3. Risk scoring based on current pace vs allocation
+    4. Department/district-level lapse probability
+    """
+    conn = sqlite3.connect(DB_PATH)
+    query = "SELECT * FROM budget WHERE 1=1"
+    params = []
+    if year:
+        query += " AND Year = ?"; params.append(year)
+    if state:
+        query += " AND State = ?"; params.append(state)
+    if district:
+        query += " AND District = ?"; params.append(district)
+    if department:
+        query += " AND Department = ?"; params.append(department)
+    
+    df = pd.read_sql_query(query, conn, params=params)
+    conn.close()
+
+    if df.empty:
+        return {"predictions": [], "summary": {}, "trends": []}
+
+    # --- Monthly spending trend ---
+    monthly = df.groupby("Month").agg(
+        total_allocated=("Allocated_Budget_Cr", "sum"),
+        total_spent=("Actual_Spending_Cr", "sum"),
+        avg_utilization=("Utilization_Percentage", "mean"),
+        avg_delay=("Delay_Days", "mean"),
+        record_count=("Project_ID", "count")
+    ).reset_index()
+    monthly = monthly.sort_values("Month")
+
+    # Cumulative spending
+    monthly["cumulative_spent"] = monthly["total_spent"].cumsum()
+    total_allocation = float(df["Allocated_Budget_Cr"].sum())
+    monthly["cumulative_pct"] = (monthly["cumulative_spent"] / total_allocation * 100).round(1)
+
+    # --- Linear Regression for future projection ---
+    if len(monthly) >= 3:
+        X_months = monthly["Month"].values.reshape(-1, 1)
+        y_spending = monthly["total_spent"].values
+        
+        lr_model = LinearRegression()
+        lr_model.fit(X_months, y_spending)
+        
+        # Forecast future months
+        last_month = int(monthly["Month"].max())
+        future_months = np.arange(last_month + 1, min(last_month + forecast_months + 1, 13)).reshape(-1, 1)
+        
+        if len(future_months) > 0:
+            forecasted_spending = lr_model.predict(future_months)
+            forecasted_spending = np.maximum(forecasted_spending, 0)  # No negative spending
+        else:
+            forecasted_spending = np.array([])
+        
+        # R-squared
+        r_squared = max(0, lr_model.score(X_months, y_spending))
+        
+        # Project year-end total spending
+        all_12 = np.arange(1, 13).reshape(-1, 1)
+        projected_full_year = float(np.sum(np.maximum(lr_model.predict(all_12), 0)))
+        projected_utilization = round(projected_full_year / total_allocation * 100, 1) if total_allocation else 0
+        projected_lapse = max(0, round(total_allocation - projected_full_year, 2))
+        projected_lapse_pct = round(projected_lapse / total_allocation * 100, 1) if total_allocation else 0
+    else:
+        future_months = np.array([])
+        forecasted_spending = np.array([])
+        r_squared = 0
+        current_util = float(df["Utilization_Percentage"].mean())
+        projected_utilization = current_util
+        projected_lapse = total_allocation * (1 - current_util / 100)
+        projected_lapse_pct = round(100 - current_util, 1)
+
+    # --- District-level lapse predictions ---
+    district_predictions = []
+    dist_groups = df.groupby(["State", "District"])
+    for (st, dist), group in dist_groups:
+        alloc = float(group["Allocated_Budget_Cr"].sum())
+        spent = float(group["Actual_Spending_Cr"].sum())
+        util = round(spent / alloc * 100, 1) if alloc else 0
+        avg_delay = float(group["Delay_Days"].mean())
+        
+        # Monthly trend within district
+        d_monthly = group.groupby("Month")["Actual_Spending_Cr"].sum().reset_index()
+        d_monthly = d_monthly.sort_values("Month")
+        
+        if len(d_monthly) >= 3:
+            d_lr = LinearRegression()
+            d_lr.fit(d_monthly["Month"].values.reshape(-1, 1), d_monthly["Actual_Spending_Cr"].values)
+            d_proj = float(np.sum(np.maximum(d_lr.predict(np.arange(1, 13).reshape(-1, 1)), 0)))
+            d_proj_util = round(d_proj / alloc * 100, 1) if alloc else 0
+            d_lapse = max(0, round(alloc - d_proj, 2))
+            trend_slope = float(d_lr.coef_[0])
+        else:
+            d_proj_util = util
+            d_lapse = max(0, round(alloc - spent, 2))
+            trend_slope = 0.0
+
+        # Risk scoring
+        lapse_pct = round(d_lapse / alloc * 100, 1) if alloc else 0
+        risk_score = 0
+        risk_factors = []
+        
+        if d_proj_util < 50:
+            risk_score += 40
+            risk_factors.append("Very low projected utilization")
+        elif d_proj_util < 70:
+            risk_score += 25
+            risk_factors.append("Below-target utilization")
+        elif d_proj_util < 85:
+            risk_score += 10
+            risk_factors.append("Moderate utilization gap")
+        
+        if trend_slope < 0:
+            risk_score += 25
+            risk_factors.append("Declining spending trend")
+        elif trend_slope < 5:
+            risk_score += 10
+            risk_factors.append("Flat spending trend")
+        
+        if avg_delay > 45:
+            risk_score += 20
+            risk_factors.append("High project delays")
+        elif avg_delay > 25:
+            risk_score += 10
+            risk_factors.append("Moderate delays")
+        
+        if alloc > 500 and lapse_pct > 30:
+            risk_score += 15
+            risk_factors.append("Large budget at high lapse risk")
+
+        risk_score = min(risk_score, 100)
+        risk_level = "CRITICAL" if risk_score >= 70 else "HIGH" if risk_score >= 50 else "MEDIUM" if risk_score >= 30 else "LOW"
+
+        district_predictions.append({
+            "State": st,
+            "District": dist,
+            "allocated": round(alloc, 2),
+            "spent": round(spent, 2),
+            "current_utilization": util,
+            "projected_utilization": d_proj_util,
+            "projected_lapse_amount": d_lapse,
+            "lapse_pct": lapse_pct,
+            "avg_delay": round(avg_delay, 1),
+            "trend_slope": round(trend_slope, 2),
+            "risk_score": risk_score,
+            "risk_level": risk_level,
+            "risk_factors": risk_factors,
+            "monthly_spending": d_monthly.to_dict(orient="records") if len(d_monthly) > 0 else []
+        })
+    
+    district_predictions.sort(key=lambda x: x["risk_score"], reverse=True)
+
+    # --- Department-level lapse predictions ---
+    dept_predictions = []
+    dept_groups = df.groupby("Department")
+    for dept, group in dept_groups:
+        alloc = float(group["Allocated_Budget_Cr"].sum())
+        spent = float(group["Actual_Spending_Cr"].sum())
+        util = round(spent / alloc * 100, 1) if alloc else 0
+        
+        dep_monthly = group.groupby("Month")["Actual_Spending_Cr"].sum().reset_index().sort_values("Month")
+        if len(dep_monthly) >= 3:
+            dep_lr = LinearRegression()
+            dep_lr.fit(dep_monthly["Month"].values.reshape(-1, 1), dep_monthly["Actual_Spending_Cr"].values)
+            dep_proj = float(np.sum(np.maximum(dep_lr.predict(np.arange(1, 13).reshape(-1, 1)), 0)))
+            dep_proj_util = round(dep_proj / alloc * 100, 1) if alloc else 0
+            dep_lapse = max(0, round(alloc - dep_proj, 2))
+        else:
+            dep_proj_util = util
+            dep_lapse = max(0, round(alloc - spent, 2))
+
+        lapse_pct = round(dep_lapse / alloc * 100, 1) if alloc else 0
+        risk_level = "CRITICAL" if lapse_pct > 40 else "HIGH" if lapse_pct > 25 else "MEDIUM" if lapse_pct > 15 else "LOW"
+
+        dept_predictions.append({
+            "Department": dept,
+            "allocated": round(alloc, 2),
+            "spent": round(spent, 2),
+            "current_utilization": util,
+            "projected_utilization": dep_proj_util,
+            "projected_lapse": dep_lapse,
+            "lapse_pct": lapse_pct,
+            "risk_level": risk_level
+        })
+    
+    dept_predictions.sort(key=lambda x: x["lapse_pct"], reverse=True)
+
+    # --- Build trend data for charts ---
+    trend_data = []
+    for _, row in monthly.iterrows():
+        trend_data.append({
+            "month": int(row["Month"]),
+            "actual_spent": round(float(row["total_spent"]), 2),
+            "cumulative_spent": round(float(row["cumulative_spent"]), 2),
+            "cumulative_pct": float(row["cumulative_pct"]),
+            "avg_utilization": round(float(row["avg_utilization"]), 1),
+            "type": "actual"
+        })
+    # Add forecasted months
+    for i, fm in enumerate(future_months.flatten()):
+        cum = float(monthly["cumulative_spent"].iloc[-1]) + float(np.sum(forecasted_spending[:i+1]))
+        trend_data.append({
+            "month": int(fm),
+            "actual_spent": round(float(forecasted_spending[i]), 2),
+            "cumulative_spent": round(cum, 2),
+            "cumulative_pct": round(cum / total_allocation * 100, 1) if total_allocation else 0,
+            "avg_utilization": None,
+            "type": "forecast"
+        })
+
+    # Overall summary
+    summary = {
+        "total_allocation": round(total_allocation, 2),
+        "total_spent": round(float(df["Actual_Spending_Cr"].sum()), 2),
+        "current_utilization": round(float(df["Actual_Spending_Cr"].sum()) / total_allocation * 100, 1) if total_allocation else 0,
+        "projected_utilization": projected_utilization,
+        "projected_lapse_pct": projected_lapse_pct,
+        "model_confidence": round(r_squared * 100, 1),
+        "high_risk_districts": len([d for d in district_predictions if d["risk_level"] in ("HIGH", "CRITICAL")]),
+        "critical_districts": len([d for d in district_predictions if d["risk_level"] == "CRITICAL"]),
+        "total_districts": len(district_predictions),
+        "forecast_months": forecast_months
+    }
+
+    return {
+        "summary": summary,
+        "predictions": district_predictions[:50],
+        "department_predictions": dept_predictions,
+        "spending_trend": trend_data
+    }
+
+
 # Initialize auth DB on startup
 @app.on_event("startup")
 async def startup_event():
@@ -1495,12 +2009,12 @@ async def startup_event():
 
 if __name__ == "__main__":
     import uvicorn
-    print("🚀 Starting Indian Budget Intelligence API...")
-    print("📊 Database:", DB_PATH)
-    print("📝 API docs: http://localhost:8000/docs")
-    print("🔑 Auth endpoint: http://localhost:8000/token")
-    print("📍 Working directory:", os.getcwd())
-    print("\n👤 Demo Users (password: admin123 for all):")
+    print("[START] Starting Indian Budget Intelligence API...")
+    print("[INFO] Database:", DB_PATH)
+    print("[INFO] API docs: http://localhost:8000/docs")
+    print("[INFO] Auth endpoint: http://localhost:8000/token")
+    print("[INFO] Working directory:", os.getcwd())
+    print("\n[INFO] Demo Users (password: admin123 for all):")
     print("   - admin (full access)")
     print("   - health_dept (health department only)")
     print("   - education_dept (education department only)")
