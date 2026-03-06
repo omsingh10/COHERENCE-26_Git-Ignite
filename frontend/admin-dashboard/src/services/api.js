@@ -40,6 +40,14 @@ export const api = {
     if (department && department !== "All Departments") p.set("department", department);
     return fetchJSON(`/api/dashboard/top-districts?${p}`);
   },
+  getLeakageMap: (limit = 24, year, state, district, department) => {
+    const p = new URLSearchParams({ limit });
+    if (year) p.set("year", year);
+    if (state && state !== "All States") p.set("state", state);
+    if (district && district !== "All Districts") p.set("district", district);
+    if (department && department !== "All Departments") p.set("department", department);
+    return fetchJSON(`/api/leakage-map?${p}`);
+  },
   getSchemes: (state, department) => {
     const params = new URLSearchParams();
     if (state) params.set("state", state);

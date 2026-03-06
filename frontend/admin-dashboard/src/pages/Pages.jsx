@@ -24,7 +24,6 @@ import {
 } from "../components/AdvancedFeatures";
 import {
   SpendingBehaviorAnalyzer,
-  LeakageHeatmap,
   SmartReallocationEngine,
 } from "../components/InsightPanels";
 import { DataExplorer } from "../components/DataExplorer";
@@ -675,21 +674,115 @@ export const SpendingBehaviorPage = ({ mockData }) => {
   );
 };
 
-export const LeakageMapPage = ({ mockData }) => {
-  const data = usePageData(mockData);
+export const LeakageMapPage = () => {
+  const filters = useFilterStore();
+  const [districts, setDistricts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    setError(null);
+    api
+      .getLeakageMap(24, filters.year, filters.state, filters.district, filters.department)
+      .then((data) => {
+        setDistricts(Array.isArray(data) ? data : []);
+        setLoading(false);
+      })
+      .catch((err) => {
+        setError(err.message);
+        setLoading(false);
+      });
+  }, [filters.year, filters.state, filters.district, filters.department]);
+
+  const getRiskStyle = (score) => {
+    if (score >= 67) return { bg: "bg-red-50 border-red-200/60", title: "text-red-700", score: "text-red-600" };
+    if (score >= 34) return { bg: "bg-amber-50 border-amber-200/60", title: "text-amber-700", score: "text-amber-600" };
+    return { bg: "bg-green-50 border-green-200/60", title: "text-green-700", score: "text-green-600" };
+  };
+
+  const fmtCr = (v) => {
+    const n = Number(v) || 0;
+    if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L Cr`;
+    if (n >= 1000)   return `₹${(n / 1000).toFixed(1)}K Cr`;
+    return `₹${n.toFixed(1)} Cr`;
+  };
+
   return (
-    <motion.div
-      variants={pageVariants}
-      initial="hidden"
-      animate="visible"
-      className="space-y-6"
-    >
+    <motion.div variants={pageVariants} initial="hidden" animate="visible" className="space-y-6">
       <PageHeader
         title="LeakageMap"
         subtitle="Corruption risk visualization across districts"
       />
-      <motion.div variants={itemVariants}>
-        <LeakageHeatmap data={data} />
+      <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-gray-100 p-6 card-lift">
+        <div className="flex items-center gap-2.5 mb-5">
+          <div className="p-2 rounded-xl bg-red-50">
+            <MapPin className="text-red-500" size={20} />
+          </div>
+          <h2 className="text-base font-semibold text-gray-800">LeakageMap – Corruption Risk</h2>
+        </div>
+
+        {/* Legend */}
+        <div className="flex gap-4 mb-5">
+          {[["bg-green-400","Low (0-33)"],["bg-amber-400","Moderate (34-66)"],["bg-red-400","High (67-100)"]].map(([color, label]) => (
+            <div key={label} className="flex items-center gap-2">
+              <div className={`w-4 h-4 ${color} rounded-md`} />
+              <span className="text-xs text-gray-500">{label}</span>
+            </div>
+          ))}
+        </div>
+
+        {loading && (
+          <div className="flex items-center justify-center py-16 text-gray-400">
+            <div className="animate-spin rounded-full h-8 w-8 border-2 border-orange-400 border-t-transparent mr-3" />
+            Loading leakage data…
+          </div>
+        )}
+
+        {error && !loading && (
+          <div className="flex items-center gap-2 text-red-500 py-8 justify-center text-sm">
+            <AlertTriangle size={16} /> Failed to load: {error}
+          </div>
+        )}
+
+        {!loading && !error && districts.length === 0 && (
+          <div className="text-center py-12 text-gray-400 text-sm">No data found for selected filters.</div>
+        )}
+
+        {!loading && !error && districts.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+            {districts.map((d, idx) => {
+              const s = getRiskStyle(d.risk_score);
+              return (
+                <motion.div
+                  key={`${d.District}-${d.State}-${idx}`}
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ delay: idx * 0.025 }}
+                  whileHover={{ scale: 1.03, y: -2 }}
+                  className={`p-3.5 rounded-xl border ${s.bg} transition-all duration-200`}
+                >
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <p className={`font-bold text-sm ${s.title}`}>{d.District}</p>
+                      <p className="text-xs text-gray-400">{d.State}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={`text-xl font-bold ${s.score}`}>{Math.round(d.risk_score)}</p>
+                      <p className="text-[10px] text-gray-400 uppercase">RISK</p>
+                    </div>
+                  </div>
+                  <div className="text-xs space-y-0.5 border-t border-current/10 pt-2 text-gray-600">
+                    <p>Allocated: <span className="font-medium">{fmtCr(d.allocated)}</span></p>
+                    <p>Spent: <span className="font-medium">{fmtCr(d.spent)}</span></p>
+                    <p>Utilization: <span className="font-medium">{Number(d.utilization).toFixed(1)}%</span></p>
+                    <p>Anomalies: <span className="font-medium text-red-500">{Math.round(d.anomaly_count)}</span> / {Math.round(d.total_projects)} projects</p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
+        )}
       </motion.div>
     </motion.div>
   );

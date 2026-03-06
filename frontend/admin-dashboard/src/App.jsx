@@ -32,7 +32,7 @@ function App() {
     flow: <BudgetFlowTrackerPage mockData={mockData} backendData={backendData} />,
     departments: <DepartmentAnalyticsPage mockData={mockData} backendData={backendData} />,
     districts: <DistrictAnalyticsPage mockData={mockData} backendData={backendData} />,
-    leakage: <LeakageMapPage mockData={mockData} backendData={backendData} />,
+    leakage: <LeakageMapPage />,
     anomaly: <AnomalyDetectionPage mockData={mockData} backendData={backendData} />,
     spending: <SpendingBehaviorPage mockData={mockData} backendData={backendData} />,
     lapse: <LapsePredictorPage mockData={mockData} backendData={backendData} />,

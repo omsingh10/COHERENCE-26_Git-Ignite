@@ -932,6 +932,65 @@ async def top_districts(
     return JSONResponse(content=result)
 
 
+@app.get("/api/leakage-map")
+async def leakage_map(
+    limit: int = 24,
+    year: Optional[int] = None,
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    department: Optional[str] = None,
+):
+    """Corruption risk heatmap data for districts — sorted by risk score"""
+    conn = sqlite3.connect(DB_PATH)
+    where, params = [], []
+    if year:
+        where.append("Year = ?")
+        params.append(year)
+    if state and state.lower() not in ("all", "all states", ""):
+        where.append("State = ?")
+        params.append(state)
+    if district and district.lower() not in ("all", "all districts", ""):
+        where.append("District = ?")
+        params.append(district)
+    if department and department.lower() not in ("all", "all departments", ""):
+        where.append("Department = ?")
+        params.append(department)
+    w = ("WHERE " + " AND ".join(where)) if where else ""
+
+    df = pd.read_sql(f"""
+        SELECT
+            District,
+            State,
+            ROUND(SUM(Allocated_Budget_Cr), 2)  AS allocated,
+            ROUND(SUM(Actual_Spending_Cr), 2)   AS spent,
+            ROUND(AVG(Utilization_Percentage), 1) AS utilization,
+            COUNT(1) AS total_projects,
+            COUNT(CASE WHEN Anomaly_Tag != 'Normal' THEN 1 END) AS anomaly_count,
+            ROUND(AVG(Delay_Days), 1)            AS avg_delay
+        FROM budget {w}
+        GROUP BY District, State
+    """, conn, params=params)
+    conn.close()
+
+    result = []
+    for r in df.to_dict('records'):
+        for k, v in list(r.items()):
+            if isinstance(v, (np.integer, np.floating)):
+                r[k] = float(v) if not np.isnan(float(v)) else 0.0
+            elif v is None:
+                r[k] = 0.0
+
+        total = max(r['total_projects'], 1)
+        anomaly_rate = r['anomaly_count'] / total * 100.0   # percent, eg 10.6
+        avg_delay = r['avg_delay']
+        # risk = weighted anomaly prevalence + delay contribution (0-100 scale)
+        r['risk_score'] = round(min(100.0, anomaly_rate * 5.0 + min(40.0, avg_delay)))
+        result.append(r)
+
+    result.sort(key=lambda x: x['risk_score'], reverse=True)
+    return JSONResponse(content=result[:int(limit)])
+
+
 @app.get("/api/dashboard/schemes")
 async def schemes_list(state: str = None, department: str = None, limit: int = 50):
     """Scheme-wise data with optional filters"""
