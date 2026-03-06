@@ -18,26 +18,28 @@ import {
 } from "./pages/Pages";
 import { useDashboardStore } from "./hooks/store";
 import { generateMockData } from "./data/mockData";
+import { useBackendData } from "./hooks/useBackendData";
 
 function App() {
   const { selectedPage, sidebarOpen } = useDashboardStore();
   const { setSelectedPage } = useDashboardStore();
 
   const mockData = useMemo(() => generateMockData(), []);
+  const { backendData, stats: backendStats, isBackendOnline, loading: backendLoading } = useBackendData(mockData);
 
   const pageMap = {
-    overview: <DashboardOverview mockData={mockData} />,
-    flow: <BudgetFlowTrackerPage mockData={mockData} />,
-    departments: <DepartmentAnalyticsPage mockData={mockData} />,
-    districts: <DistrictAnalyticsPage mockData={mockData} />,
-    leakage: <LeakageMapPage mockData={mockData} />,
-    anomaly: <AnomalyDetectionPage mockData={mockData} />,
-    spending: <SpendingBehaviorPage mockData={mockData} />,
-    lapse: <LapsePredictorPage mockData={mockData} />,
-    reallocation: <SmartReallocationPage mockData={mockData} />,
-    gpt: <BudgetGPTPage mockData={mockData} />,
-    risk: <RiskIntelligencePage mockData={mockData} />,
-    explorer: <DataExplorerPage mockData={mockData} />,
+    overview: <DashboardOverview mockData={mockData} backendData={backendData} backendStats={backendStats} isBackendOnline={isBackendOnline} />,
+    flow: <BudgetFlowTrackerPage mockData={mockData} backendData={backendData} />,
+    departments: <DepartmentAnalyticsPage mockData={mockData} backendData={backendData} />,
+    districts: <DistrictAnalyticsPage mockData={mockData} backendData={backendData} />,
+    leakage: <LeakageMapPage />,
+    anomaly: <AnomalyDetectionPage mockData={mockData} backendData={backendData} />,
+    spending: <SpendingBehaviorPage mockData={mockData} backendData={backendData} />,
+    lapse: <LapsePredictorPage mockData={mockData} backendData={backendData} />,
+    reallocation: <SmartReallocationPage mockData={mockData} backendData={backendData} />,
+    gpt: <BudgetGPTPage mockData={mockData} backendData={backendData} />,
+    risk: <RiskIntelligencePage mockData={mockData} backendData={backendData} />,
+    explorer: <DataExplorerPage mockData={mockData} backendData={backendData} />,
   };
 
   return (
@@ -49,7 +51,7 @@ function App() {
         transition={{ duration: 0.3, ease: [0.4, 0, 0.2, 1] }}
         className="flex-1 flex flex-col overflow-hidden"
       >
-        <Header mockData={mockData} />
+        <Header mockData={mockData} isBackendOnline={isBackendOnline} backendLoading={backendLoading} />
 
         <AnimatePresence mode="wait">
           <motion.main
