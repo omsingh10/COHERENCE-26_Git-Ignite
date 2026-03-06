@@ -1,10 +1,11 @@
 # main.py
-from fastapi import FastAPI, Query, Depends, HTTPException, status
+from fastapi import FastAPI, Query, Depends, HTTPException, status, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, List
+import asyncio
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
@@ -623,6 +624,78 @@ async def health_check():
             "status": "unhealthy",
             "error": str(e)
         }
+
+# ============ WEBSOCKET ALERT SYSTEM ============
+class AlertManager:
+    def __init__(self):
+        self.connections: List[WebSocket] = []
+        self._running = False
+
+    async def connect(self, ws: WebSocket):
+        await ws.accept()
+        self.connections.append(ws)
+
+    def disconnect(self, ws: WebSocket):
+        if ws in self.connections:
+            self.connections.remove(ws)
+
+    async def broadcast(self, message: dict):
+        dead = []
+        for ws in self.connections:
+            try:
+                await ws.send_json(message)
+            except Exception:
+                dead.append(ws)
+        for ws in dead:
+            self.disconnect(ws)
+
+    async def generate_alerts(self):
+        """Background task that checks for anomalies and broadcasts alerts."""
+        if self._running:
+            return
+        self._running = True
+        try:
+            while True:
+                await asyncio.sleep(30)  # check every 30 seconds
+                if not self.connections:
+                    continue
+                try:
+                    conn = sqlite3.connect(DB_PATH)
+                    # Find critical underspend (< 30% utilization)
+                    df = pd.read_sql_query(
+                        "SELECT State, District, Department, allocated, spent FROM budget WHERE utilization < 30 ORDER BY RANDOM() LIMIT 3",
+                        conn
+                    )
+                    conn.close()
+                    for _, row in df.iterrows():
+                        alert = {
+                            "type": "critical_underspend",
+                            "severity": "high",
+                            "title": f"Critical Underspend: {row['District']}",
+                            "message": f"{row['Department']} in {row['District']}, {row['State']} — allocated ₹{row['allocated']:.1f}Cr but spent only ₹{row['spent']:.1f}Cr",
+                            "timestamp": datetime.utcnow().isoformat(),
+                        }
+                        await self.broadcast(alert)
+                except Exception:
+                    pass
+        finally:
+            self._running = False
+
+alert_manager = AlertManager()
+
+@app.websocket("/ws/alerts")
+async def websocket_alerts(ws: WebSocket):
+    await alert_manager.connect(ws)
+    # start background alert generator if not already running
+    asyncio.ensure_future(alert_manager.generate_alerts())
+    try:
+        while True:
+            # keep connection alive; respond to pings
+            data = await ws.receive_text()
+            if data == "ping":
+                await ws.send_json({"type": "pong"})
+    except WebSocketDisconnect:
+        alert_manager.disconnect(ws)
 
 # Initialize auth DB on startup
 @app.on_event("startup")
