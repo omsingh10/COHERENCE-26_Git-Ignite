@@ -597,7 +597,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
-            itemBuilder: (context) => [
+            itemBuilder: (context) => <PopupMenuEntry>[
               PopupMenuItem(
                 enabled: false,
                 child: Column(
