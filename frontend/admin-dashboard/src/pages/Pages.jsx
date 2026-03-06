@@ -423,12 +423,18 @@ export const DistrictAnalyticsPage = ({ mockData }) => {
             Spent: Math.round((d.spent || 0) * 10) / 10,
           }))
         );
-        setMonthlyData(
-          (monthly || []).map((m) => ({
-            month: m.month || "?",
-            spending: Math.round((m.spending || m.spent || 0) * 10) / 10,
-          }))
-        );
+        // aggregate monthly by month_name (sum across years)
+        const mmap = {};
+        const monthOrder = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+        (monthly || []).forEach((m) => {
+          const key = m.month_name || String(m.Month) || "?";
+          if (!mmap[key]) mmap[key] = { month: key, spending: 0, _ord: m.Month || 0 };
+          mmap[key].spending += (m.spent || 0);
+        });
+        const sortedMonthly = monthOrder
+          .filter((k) => mmap[k])
+          .map((k) => ({ month: k, spending: Math.round(mmap[k].spending * 10) / 10 }));
+        setMonthlyData(sortedMonthly);
         setBackendOnline(true);
       })
       .catch(() => setBackendOnline(false))

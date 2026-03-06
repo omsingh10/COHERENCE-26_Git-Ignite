@@ -51,10 +51,11 @@ const Header = ({ mockData }) => {
           {/* Filters */}
           <div className="flex items-center gap-2.5 flex-wrap">
             <select
-              value={year}
-              onChange={(e) => setYear(parseInt(e.target.value))}
+              value={year ?? ""}
+              onChange={(e) => setYear(e.target.value ? parseInt(e.target.value) : null)}
               className="px-3 py-2.5 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-orange-400 cursor-pointer text-sm font-medium text-gray-700 hover:border-orange-300 transition-all duration-200"
             >
+              <option value="">All Years</option>
               {years.map((y) => (
                 <option key={y} value={y}>
                   {y}

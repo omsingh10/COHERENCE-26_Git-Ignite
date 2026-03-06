@@ -1,7 +1,7 @@
 import { create } from "zustand";
 
 export const useFilterStore = create((set) => ({
-  year: 2025,
+  year: null,
   state: null,
   district: null,
   department: null,
@@ -15,7 +15,7 @@ export const useFilterStore = create((set) => ({
 
   resetFilters: () =>
     set({
-      year: 2025,
+      year: null,
       state: null,
       district: null,
       department: null,
