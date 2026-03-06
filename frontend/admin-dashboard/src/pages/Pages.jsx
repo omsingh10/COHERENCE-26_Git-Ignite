@@ -400,110 +400,185 @@ export const BudgetFlowTrackerPage = ({ mockData }) => {
 };
 
 export const DistrictAnalyticsPage = ({ mockData }) => {
-  const data = usePageData(mockData);
-  const topDistricts = getTopDistricts(data, "allocated", 15);
+  const filters = useFilterStore();
+  const [districtRows, setDistrictRows] = useState([]);
+  const [deptData, setDeptData] = useState([]);
+  const [monthlyData, setMonthlyData] = useState([]);
+  const [backendOnline, setBackendOnline] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    Promise.all([
+      api.getTopDistricts(15, filters.year, filters.state, filters.district, filters.department),
+      api.getDepartmentAllocation(filters.year, filters.state, filters.district, filters.department),
+      api.getMonthlyTrend(filters.year, filters.state, filters.district, filters.department),
+    ])
+      .then(([districts, depts, monthly]) => {
+        setDistrictRows(districts || []);
+        setDeptData(
+          (depts || []).map((d) => ({
+            name: d.Department || "Unknown",
+            Allocated: Math.round((d.allocated || 0) * 10) / 10,
+            Spent: Math.round((d.spent || 0) * 10) / 10,
+          }))
+        );
+        setMonthlyData(
+          (monthly || []).map((m) => ({
+            month: m.month || "?",
+            spending: Math.round((m.spending || m.spent || 0) * 10) / 10,
+          }))
+        );
+        setBackendOnline(true);
+      })
+      .catch(() => setBackendOnline(false))
+      .finally(() => setLoading(false));
+  }, [filters.year, filters.state, filters.district, filters.department]);
+
+  const activePills = [
+    filters.year && { label: String(filters.year), color: "bg-orange-100 text-orange-700" },
+    filters.state && filters.state !== "All States" && { label: filters.state, color: "bg-blue-100 text-blue-700" },
+    filters.district && filters.district !== "All Districts" && { label: filters.district, color: "bg-purple-100 text-purple-700" },
+    filters.department && filters.department !== "All Departments" && { label: filters.department, color: "bg-green-100 text-green-700" },
+  ].filter(Boolean);
 
   return (
-    <motion.div
-      variants={pageVariants}
-      initial="hidden"
-      animate="visible"
-      className="space-y-6"
-    >
-      <PageHeader
-        title="District Analytics"
-        subtitle="Budget allocation and spending deep dive by district"
-      />
-
-      {/* District Overview Cards */}
-      <motion.div
-        variants={itemVariants}
-        className="bg-white rounded-2xl border border-gray-100 p-6 card-lift"
-      >
-        <h2 className="text-base font-semibold text-gray-800 mb-5">
-          Top Districts by Allocation
-        </h2>
-        <div className="overflow-x-auto rounded-xl border border-gray-100">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="bg-gray-50/80">
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  #
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  District
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  State
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Allocated
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Spent
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Utilization
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Risk
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
-                  Anomalies
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {topDistricts.map((d, idx) => (
-                <tr
-                  key={d.district}
-                  className="border-t border-gray-50 hover:bg-orange-50/30 transition-colors duration-150"
-                >
-                  <td className="px-4 py-3">
-                    <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold bg-gray-100 text-gray-500">
-                      {idx + 1}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-semibold text-gray-800">
-                    {d.district}
-                  </td>
-                  <td className="px-4 py-3 text-gray-500">{d.state}</td>
-                  <td className="px-4 py-3 text-right text-orange-600 font-medium">
-                    {formatCurrency(d.allocated)}
-                  </td>
-                  <td className="px-4 py-3 text-right text-green-600 font-semibold">
-                    {formatCurrency(d.spent)}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span
-                      className={`font-semibold ${d.utilization >= 85 ? "text-green-500" : d.utilization >= 50 ? "text-amber-500" : "text-red-500"}`}
-                    >
-                      {d.utilization}%
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <span
-                      className={`font-bold ${d.riskScore >= 70 ? "text-red-500" : d.riskScore >= 40 ? "text-amber-500" : "text-green-500"}`}
-                    >
-                      {d.riskScore}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right text-red-500 font-semibold">
-                    {d.anomalyCount}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <motion.div variants={pageVariants} initial="hidden" animate="visible" className="space-y-6">
+      {/* Header */}
+      <motion.div variants={itemVariants} className="mb-1">
+        <div className="flex items-start justify-between flex-wrap gap-3">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-900">District Analytics</h1>
+            <p className="text-sm text-gray-500 mt-0.5">Budget allocation and spending deep dive by district</p>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {activePills.map((p) => (
+              <span key={p.label} className={`px-2.5 py-1 rounded-full text-xs font-semibold ${p.color}`}>{p.label}</span>
+            ))}
+            <span className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-full ${backendOnline ? "bg-green-100 text-green-700" : "bg-gray-100 text-gray-500"}`}>
+              {backendOnline ? <Wifi size={12} /> : <WifiOff size={12} />}
+              {backendOnline ? "Live" : "Offline"}
+            </span>
+          </div>
         </div>
       </motion.div>
 
-      {/* Charts */}
-      <motion.div variants={itemVariants}>
-        <BudgetAllocationChart data={data} />
+      {/* Top Districts Table */}
+      <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-gray-100 p-6 card-lift">
+        <h2 className="text-base font-semibold text-gray-800 mb-5">Top Districts by Allocation</h2>
+        {loading ? (
+          <div className="flex items-center justify-center h-32 text-gray-400 text-sm">Loading data...</div>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-gray-100">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-gray-50/80">
+                  {["#", "District", "State", "Allocated", "Spent", "Utilization", "Risk", "Anomalies"].map((h) => (
+                    <th
+                      key={h}
+                      className={`px-4 py-3 text-xs font-semibold text-gray-400 uppercase tracking-wider ${
+                        ["#", "District", "State"].includes(h) ? "text-left" : "text-right"
+                      }`}
+                    >
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {districtRows.length > 0 ? (
+                  districtRows.map((d, idx) => (
+                    <tr key={idx} className="border-t border-gray-50 hover:bg-orange-50/30 transition-colors duration-150">
+                      <td className="px-4 py-3">
+                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg text-xs font-bold bg-gray-100 text-gray-500">{idx + 1}</span>
+                      </td>
+                      <td className="px-4 py-3 font-semibold text-gray-800">{d.District}</td>
+                      <td className="px-4 py-3 text-gray-500">{d.State}</td>
+                      <td className="px-4 py-3 text-right text-orange-600 font-medium">₹{(d.allocated || 0).toFixed(1)}</td>
+                      <td className="px-4 py-3 text-right text-green-600 font-semibold">₹{(d.spent || 0).toFixed(1)}</td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`font-semibold ${
+                          (d.utilization || 0) >= 85 ? "text-green-500" : (d.utilization || 0) >= 50 ? "text-amber-500" : "text-red-500"
+                        }`}>
+                          {(d.utilization || 0).toFixed(1)}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className={`font-bold ${
+                          (d.risk_score || 0) >= 70 ? "text-red-500" : (d.risk_score || 0) >= 40 ? "text-amber-500" : "text-green-500"
+                        }`}>
+                          {Math.round(d.risk_score || 0)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right text-red-500 font-semibold">{d.anomalies || 0}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
+                      No districts found for selected filters
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </motion.div>
-      <motion.div variants={itemVariants}>
-        <MonthlySpendinTrendChart data={data} />
+
+      {/* Budget Allocation vs Spending Bar Chart */}
+      <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-gray-100 p-6 card-lift">
+        <h2 className="text-base font-semibold text-gray-800 mb-5">Budget Allocation vs Spending</h2>
+        {loading ? (
+          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading...</div>
+        ) : deptData.length === 0 ? (
+          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">No data for selected filters</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={280}>
+            <ReBarChart data={deptData} margin={{ top: 10, right: 20, left: 0, bottom: 30 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-20} textAnchor="end" interval={0} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <RechartsTooltip formatter={(v, n) => [`₹${Number(v).toFixed(1)} Cr`, n]} />
+              <Legend />
+              <Bar dataKey="Allocated" fill="#f97316" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="Spent" fill="#22c55e" radius={[4, 4, 0, 0]} />
+            </ReBarChart>
+          </ResponsiveContainer>
+        )}
+      </motion.div>
+
+      {/* Monthly Spending Trend Area Chart */}
+      <motion.div variants={itemVariants} className="bg-white rounded-2xl border border-gray-100 p-6 card-lift">
+        <h2 className="text-base font-semibold text-gray-800 mb-5">Monthly Spending Trend</h2>
+        {loading ? (
+          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">Loading...</div>
+        ) : monthlyData.length === 0 ? (
+          <div className="flex items-center justify-center h-48 text-gray-400 text-sm">No monthly data for selected filters</div>
+        ) : (
+          <ResponsiveContainer width="100%" height={280}>
+            <AreaChart data={monthlyData} margin={{ top: 10, right: 20, left: 0, bottom: 20 }}>
+              <defs>
+                <linearGradient id="distMonthGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f97316" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#f97316" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+              <XAxis dataKey="month" tick={{ fontSize: 11 }} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <RechartsTooltip formatter={(v) => [`₹${Number(v).toFixed(1)} Cr`, "Spending"]} />
+              <Area
+                type="monotone"
+                dataKey="spending"
+                stroke="#f97316"
+                strokeWidth={2}
+                fill="url(#distMonthGrad)"
+                dot={{ r: 3, fill: "#f97316" }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
       </motion.div>
     </motion.div>
   );

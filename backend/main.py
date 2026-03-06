@@ -880,9 +880,29 @@ async def anomalies_list(limit: int = 20):
 
 
 @app.get("/api/dashboard/top-districts")
-async def top_districts(limit: int = 15):
-    """Top districts by allocation for leakage heatmap"""
+async def top_districts(
+    limit: int = 15,
+    year: Optional[int] = None,
+    state: Optional[str] = None,
+    district: Optional[str] = None,
+    department: Optional[str] = None,
+):
+    """Top districts by allocation with optional filters"""
     conn = sqlite3.connect(DB_PATH)
+    where, params = [], []
+    if year:
+        where.append("Year = ?")
+        params.append(year)
+    if state and state.lower() not in ("all", "all states", ""):
+        where.append("State = ?")
+        params.append(state)
+    if district and district.lower() not in ("all", "all districts", ""):
+        where.append("District = ?")
+        params.append(district)
+    if department and department.lower() not in ("all", "all departments", ""):
+        where.append("Department = ?")
+        params.append(department)
+    w = ("WHERE " + " AND ".join(where)) if where else ""
     df = pd.read_sql(f"""
         SELECT
             District,
@@ -892,17 +912,22 @@ async def top_districts(limit: int = 15):
             AVG(Utilization_Percentage) as utilization,
             COUNT(CASE WHEN Anomaly_Tag != 'Normal' THEN 1 END) as anomalies,
             AVG(Delay_Days) as avg_delay
-        FROM budget
+        FROM budget {w}
         GROUP BY District, State
         ORDER BY allocated DESC
         LIMIT {int(limit)}
-    """, conn)
+    """, conn, params=params)
     conn.close()
     result = []
     for r in df.to_dict('records'):
-        for k, v in r.items():
+        avg_delay = float(r.get('avg_delay') or 0)
+        utilization = float(r.get('utilization') or 0)
+        r['risk_score'] = round(min(100.0, max(0.0, avg_delay / 2.0 + max(0.0, (50.0 - utilization)))))
+        for k, v in list(r.items()):
             if isinstance(v, (np.integer, np.floating)):
-                r[k] = float(v)
+                r[k] = float(v) if not np.isnan(float(v)) else 0.0
+            elif v is None:
+                r[k] = 0.0
         result.append(r)
     return JSONResponse(content=result)
 

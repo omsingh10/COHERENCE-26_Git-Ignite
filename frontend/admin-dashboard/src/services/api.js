@@ -32,8 +32,14 @@ export const api = {
   getStateSummary: () => fetchJSON("/api/dashboard/state-summary"),
   getAnomaliesList: (limit = 20) =>
     fetchJSON(`/api/dashboard/anomalies-list?limit=${limit}`),
-  getTopDistricts: (limit = 15) =>
-    fetchJSON(`/api/dashboard/top-districts?limit=${limit}`),
+  getTopDistricts: (limit = 15, year, state, district, department) => {
+    const p = new URLSearchParams({ limit });
+    if (year) p.set("year", year);
+    if (state && state !== "All States") p.set("state", state);
+    if (district && district !== "All Districts") p.set("district", district);
+    if (department && department !== "All Departments") p.set("department", department);
+    return fetchJSON(`/api/dashboard/top-districts?${p}`);
+  },
   getSchemes: (state, department) => {
     const params = new URLSearchParams();
     if (state) params.set("state", state);
