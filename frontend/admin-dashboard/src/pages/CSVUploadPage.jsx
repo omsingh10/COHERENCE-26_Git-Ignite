@@ -1,6 +1,15 @@
 import React, { useState, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Upload, FileText, CheckCircle, AlertCircle, X, Download, Table, ArrowRight } from "lucide-react";
+import {
+  Upload,
+  FileText,
+  CheckCircle,
+  AlertCircle,
+  X,
+  Download,
+  Table,
+  ArrowRight,
+} from "lucide-react";
 import { api } from "../services/api";
 
 const CSVUploadPage = () => {
@@ -32,7 +41,9 @@ const CSVUploadPage = () => {
     reader.onload = (e) => {
       const text = e.target.result;
       const lines = text.split("\n").filter((l) => l.trim());
-      const headers = lines[0].split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+      const headers = lines[0]
+        .split(",")
+        .map((h) => h.trim().replace(/^"|"$/g, ""));
       const rows = lines.slice(1, 6).map((line) => {
         const vals = line.split(",").map((v) => v.trim().replace(/^"|"$/g, ""));
         const obj = {};
@@ -99,9 +110,12 @@ const CSVUploadPage = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Upload Budget Data</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            Upload Budget Data
+          </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Import CSV files to add new budget records to the database for analysis
+            Import CSV files to add new budget records to the database for
+            analysis
           </p>
         </div>
         <button
@@ -123,14 +137,22 @@ const CSVUploadPage = () => {
             className="bg-blue-50 border border-blue-200 rounded-xl p-4"
           >
             <div className="flex items-center justify-between mb-2">
-              <h3 className="text-sm font-semibold text-blue-800">Required CSV Columns ({templateCols.length})</h3>
-              <button onClick={() => setTemplateCols(null)} className="text-blue-400 hover:text-blue-600">
+              <h3 className="text-sm font-semibold text-blue-800">
+                Required CSV Columns ({templateCols.length})
+              </h3>
+              <button
+                onClick={() => setTemplateCols(null)}
+                className="text-blue-400 hover:text-blue-600"
+              >
                 <X size={16} />
               </button>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {templateCols.map((col) => (
-                <span key={col} className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono">
+                <span
+                  key={col}
+                  className="px-2 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-mono"
+                >
                   {col}
                 </span>
               ))}
@@ -150,8 +172,8 @@ const CSVUploadPage = () => {
           dragActive
             ? "border-orange-500 bg-orange-50 scale-[1.01]"
             : file
-            ? "border-green-300 bg-green-50"
-            : "border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50/30"
+              ? "border-green-300 bg-green-50"
+              : "border-gray-200 bg-white hover:border-orange-300 hover:bg-orange-50/30"
         }`}
       >
         <input
@@ -169,7 +191,8 @@ const CSVUploadPage = () => {
             <div>
               <p className="font-semibold text-gray-900">{file.name}</p>
               <p className="text-sm text-gray-500">
-                {(file.size / 1024).toFixed(1)} KB • {preview?.totalRows || "?"} rows detected
+                {(file.size / 1024).toFixed(1)} KB • {preview?.totalRows || "?"}{" "}
+                rows detected
               </p>
             </div>
             <button
@@ -187,10 +210,15 @@ const CSVUploadPage = () => {
         ) : (
           <div className="space-y-3">
             <div className="w-16 h-16 bg-orange-100 rounded-2xl flex items-center justify-center mx-auto">
-              <Upload className={`text-orange-600 ${dragActive ? "animate-bounce" : ""}`} size={28} />
+              <Upload
+                className={`text-orange-600 ${dragActive ? "animate-bounce" : ""}`}
+                size={28}
+              />
             </div>
             <div>
-              <p className="font-semibold text-gray-900">Drop your CSV file here</p>
+              <p className="font-semibold text-gray-900">
+                Drop your CSV file here
+              </p>
               <p className="text-sm text-gray-500">or click to browse files</p>
             </div>
           </div>
@@ -237,21 +265,34 @@ const CSVUploadPage = () => {
                 <thead>
                   <tr className="bg-gray-50">
                     {preview.headers.slice(0, 12).map((h) => (
-                      <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap">
+                      <th
+                        key={h}
+                        className="px-3 py-2 text-left text-xs font-semibold text-gray-600 whitespace-nowrap"
+                      >
                         {h}
                       </th>
                     ))}
                     {preview.headers.length > 12 && (
-                      <th className="px-3 py-2 text-xs text-gray-400">+{preview.headers.length - 12} more</th>
+                      <th className="px-3 py-2 text-xs text-gray-400">
+                        +{preview.headers.length - 12} more
+                      </th>
                     )}
                   </tr>
                 </thead>
                 <tbody>
                   {preview.rows.map((row, i) => (
-                    <tr key={i} className="border-t border-gray-50 hover:bg-orange-50/30">
+                    <tr
+                      key={i}
+                      className="border-t border-gray-50 hover:bg-orange-50/30"
+                    >
                       {preview.headers.slice(0, 12).map((h) => (
-                        <td key={h} className="px-3 py-2 text-gray-700 whitespace-nowrap text-xs">
-                          {h.includes("Budget") || h.includes("Spending") ? formatCurrency(row[h]) : row[h]}
+                        <td
+                          key={h}
+                          className="px-3 py-2 text-gray-700 whitespace-nowrap text-xs"
+                        >
+                          {h.includes("Budget") || h.includes("Spending")
+                            ? formatCurrency(row[h])
+                            : row[h]}
                         </td>
                       ))}
                     </tr>
@@ -273,16 +314,22 @@ const CSVUploadPage = () => {
           >
             <div className="flex items-center gap-3 mb-4">
               <CheckCircle className="text-green-600" size={24} />
-              <h3 className="font-bold text-green-800 text-lg">Upload Successful!</h3>
+              <h3 className="font-bold text-green-800 text-lg">
+                Upload Successful!
+              </h3>
             </div>
             <div className="grid grid-cols-2 gap-4 mb-4">
               <div className="bg-white rounded-xl p-4 border border-green-100">
                 <p className="text-sm text-gray-500">Rows Added</p>
-                <p className="text-2xl font-bold text-green-700">{result.rows_added}</p>
+                <p className="text-2xl font-bold text-green-700">
+                  {result.rows_added}
+                </p>
               </div>
               <div className="bg-white rounded-xl p-4 border border-green-100">
                 <p className="text-sm text-gray-500">Columns Matched</p>
-                <p className="text-2xl font-bold text-green-700">{result.columns?.length || 0}</p>
+                <p className="text-2xl font-bold text-green-700">
+                  {result.columns?.length || 0}
+                </p>
               </div>
             </div>
             <button
@@ -308,12 +355,18 @@ const CSVUploadPage = () => {
             exit={{ opacity: 0 }}
             className="bg-red-50 border border-red-200 rounded-2xl p-4 flex items-start gap-3"
           >
-            <AlertCircle className="text-red-500 flex-shrink-0 mt-0.5" size={20} />
+            <AlertCircle
+              className="text-red-500 flex-shrink-0 mt-0.5"
+              size={20}
+            />
             <div>
               <p className="font-semibold text-red-800">Upload Error</p>
               <p className="text-sm text-red-600 mt-1">{error}</p>
             </div>
-            <button onClick={() => setError(null)} className="ml-auto text-red-400 hover:text-red-600">
+            <button
+              onClick={() => setError(null)}
+              className="ml-auto text-red-400 hover:text-red-600"
+            >
               <X size={16} />
             </button>
           </motion.div>
@@ -328,7 +381,8 @@ const CSVUploadPage = () => {
           </div>
           <h4 className="font-semibold text-gray-900 mb-1">CSV Format</h4>
           <p className="text-xs text-gray-500">
-            Upload standard CSV files with 28 budget columns including Year, State, District, Department, Allocated/Spent budgets.
+            Upload standard CSV files with 28 budget columns including Year,
+            State, District, Department, Allocated/Spent budgets.
           </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-5">
@@ -337,7 +391,8 @@ const CSVUploadPage = () => {
           </div>
           <h4 className="font-semibold text-gray-900 mb-1">Auto-Validation</h4>
           <p className="text-xs text-gray-500">
-            Data is validated for required columns, numeric types are auto-cast, and missing critical fields are filtered out.
+            Data is validated for required columns, numeric types are auto-cast,
+            and missing critical fields are filtered out.
           </p>
         </div>
         <div className="bg-white rounded-xl border border-gray-100 p-5">
@@ -346,7 +401,8 @@ const CSVUploadPage = () => {
           </div>
           <h4 className="font-semibold text-gray-900 mb-1">Instant Analysis</h4>
           <p className="text-xs text-gray-500">
-            Once uploaded, data is immediately available across all dashboards — anomaly detection, predictions, and reports.
+            Once uploaded, data is immediately available across all dashboards —
+            anomaly detection, predictions, and reports.
           </p>
         </div>
       </div>

@@ -115,24 +115,49 @@ export const api = {
   getTemplateColumns: () => fetchJSON("/api/upload/template-columns"),
 
   // Advanced Anomaly Detection
-  getAnomalyDetection: (year, state, district, department, sensitivity = 0.1) => {
+  getAnomalyDetection: (
+    year,
+    state,
+    district,
+    department,
+    sensitivity = 0.1,
+  ) => {
     const p = new URLSearchParams();
     if (year) p.set("year", year);
     if (state && state !== "All States") p.set("state", state);
     if (district && district !== "All Districts") p.set("district", district);
-    if (department && department !== "All Departments") p.set("department", department);
+    if (department && department !== "All Departments")
+      p.set("department", department);
     if (sensitivity !== 0.1) p.set("sensitivity", sensitivity);
     return fetchJSON(`/api/analytics/anomaly-detection?${p}`);
   },
 
   // Predictive Modeling - Fund Lapse
-  getFundLapsePrediction: (year, state, district, department, forecastMonths = 3) => {
+  getFundLapsePrediction: (
+    year,
+    state,
+    district,
+    department,
+    forecastMonths = 3,
+  ) => {
     const p = new URLSearchParams();
     if (year) p.set("year", year);
     if (state && state !== "All States") p.set("state", state);
     if (district && district !== "All Districts") p.set("district", district);
-    if (department && department !== "All Departments") p.set("department", department);
+    if (department && department !== "All Departments")
+      p.set("department", department);
     if (forecastMonths !== 3) p.set("forecast_months", forecastMonths);
     return fetchJSON(`/api/analytics/fund-lapse-prediction?${p}`);
+  },
+
+  // Smart Reallocation
+  getSmartReallocation: (year, state, district, department) => {
+    const p = new URLSearchParams();
+    if (year) p.set("year", year);
+    if (state && state !== "All States") p.set("state", state);
+    if (district && district !== "All Districts") p.set("district", district);
+    if (department && department !== "All Departments")
+      p.set("department", department);
+    return fetchJSON(`/api/analytics/smart-reallocation?${p}`);
   },
 };

@@ -1,13 +1,31 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
-  TrendingDown, AlertTriangle, BarChart3, Filter, RefreshCw,
-  ArrowDownRight, ArrowUpRight, Target, Activity
+  TrendingDown,
+  AlertTriangle,
+  BarChart3,
+  Filter,
+  RefreshCw,
+  ArrowDownRight,
+  ArrowUpRight,
+  Target,
+  Activity,
 } from "lucide-react";
 import {
-  AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid,
-  Tooltip, Legend, ResponsiveContainer, ComposedChart, Line,
-  Cell, ReferenceLine
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+  ComposedChart,
+  Line,
+  Cell,
+  ReferenceLine,
 } from "recharts";
 import { api } from "../services/api";
 import { useFilterStore } from "../hooks/store";
@@ -19,7 +37,20 @@ const RISK_COLORS = {
   LOW: "#10b981",
 };
 
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+const MONTH_NAMES = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+];
 
 const PredictiveModelingDashboard = () => {
   const { year, state, district, department } = useFilterStore();
@@ -38,7 +69,13 @@ const PredictiveModelingDashboard = () => {
     setError(null);
     try {
       const [result, stList, deptList] = await Promise.all([
-        api.getFundLapsePrediction(localYear || year, localState || state, null, localDept || department, forecastMonths),
+        api.getFundLapsePrediction(
+          localYear || year,
+          localState || state,
+          null,
+          localDept || department,
+          forecastMonths,
+        ),
         api.getStates(),
         api.getDepartments(),
       ]);
@@ -50,9 +87,19 @@ const PredictiveModelingDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [year, state, department, forecastMonths, localYear, localState, localDept]);
+  }, [
+    year,
+    state,
+    department,
+    forecastMonths,
+    localYear,
+    localState,
+    localDept,
+  ]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // Prepare trend chart data with month names
   const trendChartData = (data?.spending_trend || []).map((d) => ({
@@ -65,8 +112,12 @@ const PredictiveModelingDashboard = () => {
       <div className="flex items-center justify-center h-96">
         <div className="text-center space-y-4">
           <div className="w-12 h-12 border-3 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-gray-500 font-medium">Running predictive models...</p>
-          <p className="text-xs text-gray-400">Linear Regression + Trend Analysis + Risk Scoring</p>
+          <p className="text-gray-500 font-medium">
+            Running predictive models...
+          </p>
+          <p className="text-xs text-gray-400">
+            Linear Regression + Trend Analysis + Risk Scoring
+          </p>
         </div>
       </div>
     );
@@ -84,7 +135,8 @@ const PredictiveModelingDashboard = () => {
             Fund Lapse Prediction
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            ML-powered forecasting: Linear Regression + Trend Analysis + Multi-factor Risk Scoring
+            ML-powered forecasting: Linear Regression + Trend Analysis +
+            Multi-factor Risk Scoring
           </p>
         </div>
         <button
@@ -100,7 +152,9 @@ const PredictiveModelingDashboard = () => {
       <div className="bg-white rounded-2xl border border-gray-100 p-4 shadow-sm">
         <div className="flex items-center gap-2 mb-3">
           <Filter size={16} className="text-orange-600" />
-          <span className="text-sm font-semibold text-gray-700">Filters & Parameters</span>
+          <span className="text-sm font-semibold text-gray-700">
+            Filters & Parameters
+          </span>
         </div>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
           <select
@@ -110,7 +164,9 @@ const PredictiveModelingDashboard = () => {
           >
             <option value="">All Years</option>
             {[2021, 2022, 2023, 2024, 2025].map((y) => (
-              <option key={y} value={y}>{y}</option>
+              <option key={y} value={y}>
+                {y}
+              </option>
             ))}
           </select>
           <select
@@ -120,7 +176,9 @@ const PredictiveModelingDashboard = () => {
           >
             <option value="">All States</option>
             {states.map((s) => (
-              <option key={s} value={s}>{s}</option>
+              <option key={s} value={s}>
+                {s}
+              </option>
             ))}
           </select>
           <select
@@ -130,30 +188,40 @@ const PredictiveModelingDashboard = () => {
           >
             <option value="">All Departments</option>
             {departments.map((d) => (
-              <option key={d} value={d}>{d}</option>
+              <option key={d} value={d}>
+                {d}
+              </option>
             ))}
           </select>
           <div className="flex items-center gap-2">
-            <label className="text-xs text-gray-500 whitespace-nowrap">Forecast</label>
+            <label className="text-xs text-gray-500 whitespace-nowrap">
+              Forecast
+            </label>
             <select
               value={forecastMonths}
               onChange={(e) => setForecastMonths(parseInt(e.target.value))}
               className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm outline-none focus:border-orange-400"
             >
               {[1, 2, 3, 6, 9, 12].map((m) => (
-                <option key={m} value={m}>{m} months</option>
+                <option key={m} value={m}>
+                  {m} months
+                </option>
               ))}
             </select>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-gray-500">Confidence</span>
-            <span className="text-sm font-bold text-orange-600">{summary.model_confidence || 0}%</span>
+            <span className="text-sm font-bold text-orange-600">
+              {summary.model_confidence || 0}%
+            </span>
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
+          {error}
+        </div>
       )}
 
       {/* KPI Cards */}
@@ -176,12 +244,20 @@ const PredictiveModelingDashboard = () => {
             value: `${summary.projected_utilization || 0}%`,
             color: summary.projected_utilization < 70 ? "red" : "green",
             icon: TrendingDown,
-            sub: summary.projected_utilization < summary.current_utilization ? "Declining" : "Improving",
+            sub:
+              summary.projected_utilization < summary.current_utilization
+                ? "Declining"
+                : "Improving",
           },
           {
             label: "Projected Lapse",
             value: `${summary.projected_lapse_pct || 0}%`,
-            color: summary.projected_lapse_pct > 25 ? "red" : summary.projected_lapse_pct > 15 ? "orange" : "green",
+            color:
+              summary.projected_lapse_pct > 25
+                ? "red"
+                : summary.projected_lapse_pct > 15
+                  ? "orange"
+                  : "green",
             icon: AlertTriangle,
           },
           {
@@ -200,7 +276,9 @@ const PredictiveModelingDashboard = () => {
           >
             <div className="flex items-center gap-2 mb-2">
               <kpi.icon size={16} className={`text-${kpi.color}-500`} />
-              <span className="text-xs text-gray-500 font-medium">{kpi.label}</span>
+              <span className="text-xs text-gray-500 font-medium">
+                {kpi.label}
+              </span>
             </div>
             <p className="text-2xl font-bold text-gray-900">{kpi.value}</p>
             {kpi.sub && <p className="text-xs text-gray-400 mt-1">{kpi.sub}</p>}
@@ -235,7 +313,10 @@ const PredictiveModelingDashboard = () => {
             />
             <Bar dataKey="actual_spent" name="Monthly Spending">
               {trendChartData.map((d, i) => (
-                <Cell key={i} fill={d.type === "forecast" ? "#93c5fd" : "#f97316"} />
+                <Cell
+                  key={i}
+                  fill={d.type === "forecast" ? "#93c5fd" : "#f97316"}
+                />
               ))}
             </Bar>
             <Line
@@ -247,9 +328,20 @@ const PredictiveModelingDashboard = () => {
               dot={false}
               yAxisId={1}
             />
-            <YAxis yAxisId={1} orientation="right" tick={{ fontSize: 11 }} unit="%" />
+            <YAxis
+              yAxisId={1}
+              orientation="right"
+              tick={{ fontSize: 11 }}
+              unit="%"
+            />
             {/* Threshold line at 100% */}
-            <ReferenceLine yAxisId={1} y={100} stroke="#ef4444" strokeDasharray="5 5" label="100%" />
+            <ReferenceLine
+              yAxisId={1}
+              y={100}
+              stroke="#ef4444"
+              strokeDasharray="5 5"
+              label="100%"
+            />
           </ComposedChart>
         </ResponsiveContainer>
         <div className="flex items-center gap-4 mt-3 text-xs text-gray-500">
@@ -266,14 +358,21 @@ const PredictiveModelingDashboard = () => {
 
       {/* Department Predictions */}
       <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-gray-800 mb-4">Department Lapse Forecast</h3>
+        <h3 className="text-sm font-semibold text-gray-800 mb-4">
+          Department Lapse Forecast
+        </h3>
         <ResponsiveContainer width="100%" height={300}>
           <BarChart
             data={(data?.department_predictions || []).slice(0, 12)}
             margin={{ left: 10, right: 20 }}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="Department" tick={{ fontSize: 9 }} angle={-20} height={60} />
+            <XAxis
+              dataKey="Department"
+              tick={{ fontSize: 9 }}
+              angle={-20}
+              height={60}
+            />
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip
               formatter={(v, name) => [
@@ -282,9 +381,24 @@ const PredictiveModelingDashboard = () => {
               ]}
             />
             <Legend />
-            <Bar dataKey="current_utilization" name="Current Util %" fill="#10b981" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="projected_utilization" name="Projected Util %" fill="#f97316" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="lapse_pct" name="Lapse Risk %" fill="#ef4444" radius={[4, 4, 0, 0]} />
+            <Bar
+              dataKey="current_utilization"
+              name="Current Util %"
+              fill="#10b981"
+              radius={[4, 4, 0, 0]}
+            />
+            <Bar
+              dataKey="projected_utilization"
+              name="Projected Util %"
+              fill="#f97316"
+              radius={[4, 4, 0, 0]}
+            />
+            <Bar
+              dataKey="lapse_pct"
+              name="Lapse Risk %"
+              fill="#ef4444"
+              radius={[4, 4, 0, 0]}
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -301,27 +415,56 @@ const PredictiveModelingDashboard = () => {
           <table className="w-full text-sm">
             <thead className="sticky top-0 bg-gray-50 z-10">
               <tr>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">Risk</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">Score</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">District</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">State</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">Allocated</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">Spent</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">Current%</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">Projected%</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">Lapse Amt</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">Lapse%</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">Trend</th>
-                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">Risk Factors</th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  Risk
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  Score
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  District
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  State
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  Allocated
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  Spent
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  Current%
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  Projected%
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  Lapse Amt
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  Lapse%
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  Trend
+                </th>
+                <th className="px-3 py-2.5 text-left text-xs font-semibold text-gray-600">
+                  Risk Factors
+                </th>
               </tr>
             </thead>
             <tbody>
               {(data?.predictions || []).map((p, i) => (
-                <tr key={i} className="border-t border-gray-50 hover:bg-gray-50 transition">
+                <tr
+                  key={i}
+                  className="border-t border-gray-50 hover:bg-gray-50 transition"
+                >
                   <td className="px-3 py-2.5">
                     <span
                       className="px-2 py-0.5 rounded-full text-xs font-bold text-white"
-                      style={{ backgroundColor: RISK_COLORS[p.risk_level] || "#94a3b8" }}
+                      style={{
+                        backgroundColor: RISK_COLORS[p.risk_level] || "#94a3b8",
+                      }}
                     >
                       {p.risk_level}
                     </span>
@@ -340,18 +483,28 @@ const PredictiveModelingDashboard = () => {
                       <span className="text-xs font-mono">{p.risk_score}</span>
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 font-medium text-gray-900">{p.District}</td>
+                  <td className="px-3 py-2.5 font-medium text-gray-900">
+                    {p.District}
+                  </td>
                   <td className="px-3 py-2.5 text-gray-600">{p.State}</td>
-                  <td className="px-3 py-2.5 text-gray-700 font-mono text-xs">₹{p.allocated} Cr</td>
-                  <td className="px-3 py-2.5 text-gray-700 font-mono text-xs">₹{p.spent} Cr</td>
+                  <td className="px-3 py-2.5 text-gray-700 font-mono text-xs">
+                    ₹{p.allocated} Cr
+                  </td>
+                  <td className="px-3 py-2.5 text-gray-700 font-mono text-xs">
+                    ₹{p.spent} Cr
+                  </td>
                   <td className="px-3 py-2.5">
-                    <span className={`font-mono text-xs ${p.current_utilization < 60 ? "text-red-600" : p.current_utilization < 80 ? "text-orange-600" : "text-green-600"}`}>
+                    <span
+                      className={`font-mono text-xs ${p.current_utilization < 60 ? "text-red-600" : p.current_utilization < 80 ? "text-orange-600" : "text-green-600"}`}
+                    >
                       {p.current_utilization}%
                     </span>
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-1">
-                      <span className={`font-mono text-xs ${p.projected_utilization < 60 ? "text-red-600" : p.projected_utilization < 80 ? "text-orange-600" : "text-green-600"}`}>
+                      <span
+                        className={`font-mono text-xs ${p.projected_utilization < 60 ? "text-red-600" : p.projected_utilization < 80 ? "text-orange-600" : "text-green-600"}`}
+                      >
                         {p.projected_utilization}%
                       </span>
                       {p.projected_utilization < p.current_utilization ? (
@@ -361,21 +514,31 @@ const PredictiveModelingDashboard = () => {
                       )}
                     </div>
                   </td>
-                  <td className="px-3 py-2.5 text-red-600 font-mono text-xs">₹{p.projected_lapse_amount} Cr</td>
+                  <td className="px-3 py-2.5 text-red-600 font-mono text-xs">
+                    ₹{p.projected_lapse_amount} Cr
+                  </td>
                   <td className="px-3 py-2.5">
-                    <span className={`font-mono text-xs font-bold ${p.lapse_pct > 30 ? "text-red-600" : p.lapse_pct > 15 ? "text-orange-600" : "text-green-600"}`}>
+                    <span
+                      className={`font-mono text-xs font-bold ${p.lapse_pct > 30 ? "text-red-600" : p.lapse_pct > 15 ? "text-orange-600" : "text-green-600"}`}
+                    >
                       {p.lapse_pct}%
                     </span>
                   </td>
                   <td className="px-3 py-2.5">
-                    <span className={`text-xs ${p.trend_slope < 0 ? "text-red-500" : "text-green-500"}`}>
-                      {p.trend_slope > 0 ? "+" : ""}{p.trend_slope}
+                    <span
+                      className={`text-xs ${p.trend_slope < 0 ? "text-red-500" : "text-green-500"}`}
+                    >
+                      {p.trend_slope > 0 ? "+" : ""}
+                      {p.trend_slope}
                     </span>
                   </td>
                   <td className="px-3 py-2.5">
                     <div className="flex flex-wrap gap-1 max-w-[200px]">
                       {(p.risk_factors || []).map((f, j) => (
-                        <span key={j} className="px-1.5 py-0.5 bg-red-50 text-red-600 rounded text-[10px] whitespace-nowrap">
+                        <span
+                          key={j}
+                          className="px-1.5 py-0.5 bg-red-50 text-red-600 rounded text-[10px] whitespace-nowrap"
+                        >
                           {f}
                         </span>
                       ))}

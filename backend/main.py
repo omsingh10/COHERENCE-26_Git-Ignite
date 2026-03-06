@@ -2002,6 +2002,209 @@ async def fund_lapse_prediction_api(
     }
 
 
+# =============================================
+# SMART REALLOCATION ANALYTICS (public)
+# =============================================
+@app.get("/api/analytics/smart-reallocation")
+async def smart_reallocation(
+    year: int = None,
+    state: str = None,
+    district: str = None,
+    department: str = None
+):
+    """AI-powered fund reallocation recommendations using real DB data"""
+    conn = sqlite3.connect(DB_PATH)
+
+    where_clauses = []
+    params = []
+    if year:
+        where_clauses.append("Year = ?")
+        params.append(year)
+    if state:
+        where_clauses.append("State = ?")
+        params.append(state)
+    if district:
+        where_clauses.append("District = ?")
+        params.append(district)
+    if department:
+        where_clauses.append("Department = ?")
+        params.append(department)
+
+    where_sql = (" WHERE " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    # Department-level summary
+    dept_df = pd.read_sql(f"""
+        SELECT
+            Department,
+            SUM(Allocated_Budget_Cr) as total_allocated,
+            SUM(Actual_Spending_Cr) as total_spent,
+            AVG(Utilization_Percentage) as avg_utilization,
+            SUM(Remaining_Budget_Cr) as total_remaining,
+            COUNT(*) as record_count,
+            AVG(Delay_Days) as avg_delay
+        FROM budget
+        {where_sql}
+        GROUP BY Department
+        ORDER BY total_allocated DESC
+    """, conn, params=params)
+
+    # State-level summary for geographic insights
+    state_df = pd.read_sql(f"""
+        SELECT
+            State,
+            SUM(Allocated_Budget_Cr) as total_allocated,
+            SUM(Actual_Spending_Cr) as total_spent,
+            AVG(Utilization_Percentage) as avg_utilization,
+            SUM(Remaining_Budget_Cr) as total_remaining,
+            COUNT(*) as record_count
+        FROM budget
+        {where_sql}
+        GROUP BY State
+        ORDER BY total_remaining DESC
+    """, conn, params=params)
+
+    # District-level for granular reallocation
+    district_df = pd.read_sql(f"""
+        SELECT
+            State,
+            District,
+            Department,
+            SUM(Allocated_Budget_Cr) as total_allocated,
+            SUM(Actual_Spending_Cr) as total_spent,
+            AVG(Utilization_Percentage) as avg_utilization,
+            SUM(Remaining_Budget_Cr) as total_remaining,
+            AVG(Delay_Days) as avg_delay
+        FROM budget
+        {where_sql}
+        GROUP BY State, District, Department
+        ORDER BY total_remaining DESC
+    """, conn, params=params)
+
+    conn.close()
+
+    # Use median-based relative splitting for surplus/deficit
+    if len(dept_df) > 1:
+        median_util = float(dept_df['avg_utilization'].median())
+        median_remaining = float(dept_df['total_remaining'].median())
+    else:
+        median_util = 77.0
+        median_remaining = 0
+
+    # Identify surplus departments (below median utilization, above median remaining)
+    surplus_depts = []
+    for _, row in dept_df.iterrows():
+        if row['avg_utilization'] <= median_util and row['total_remaining'] > 0:
+            surplus_depts.append({
+                "department": row['Department'],
+                "allocated": round(float(row['total_allocated']), 2),
+                "spent": round(float(row['total_spent']), 2),
+                "remaining": round(float(row['total_remaining']), 2),
+                "utilization": round(float(row['avg_utilization']), 1),
+                "surplus_available": round(float(row['total_remaining'] * 0.3), 2),
+                "records": int(row['record_count']),
+                "avg_delay": round(float(row['avg_delay']), 0)
+            })
+    surplus_depts.sort(key=lambda x: x['remaining'], reverse=True)
+
+    # Identify deficit departments (above median utilization)
+    deficit_depts = []
+    for _, row in dept_df.iterrows():
+        if row['avg_utilization'] > median_util:
+            deficit_depts.append({
+                "department": row['Department'],
+                "allocated": round(float(row['total_allocated']), 2),
+                "spent": round(float(row['total_spent']), 2),
+                "remaining": round(float(row['total_remaining']), 2),
+                "utilization": round(float(row['avg_utilization']), 1),
+                "deficit_amount": round(float(row['total_spent'] - row['total_allocated'] + row['total_remaining']), 2),
+                "records": int(row['record_count'])
+            })
+    deficit_depts.sort(key=lambda x: x['utilization'], reverse=True)
+
+    # Generate reallocation recommendations
+    recommendations = []
+    for i in range(min(len(surplus_depts), len(deficit_depts), 8)):
+        src = surplus_depts[i]
+        dst = deficit_depts[i]
+        transfer = round(min(src['surplus_available'], dst['allocated'] * 0.15), 2)
+        if transfer <= 0:
+            continue
+
+        projected_src_util = round(
+            (src['spent'] / max(src['allocated'] - transfer, 1)) * 100, 1
+        )
+        projected_dst_util = round(
+            (dst['spent'] / max(dst['allocated'] + transfer, 1)) * 100, 1
+        )
+
+        priority = "HIGH" if dst['utilization'] > 120 else ("MEDIUM" if dst['utilization'] > 100 else "NORMAL")
+
+        recommendations.append({
+            "id": i + 1,
+            "from_department": src['department'],
+            "to_department": dst['department'],
+            "transfer_amount_cr": transfer,
+            "from_utilization": src['utilization'],
+            "to_utilization": dst['utilization'],
+            "projected_from_util": min(projected_src_util, 100),
+            "projected_to_util": projected_dst_util,
+            "from_remaining": src['remaining'],
+            "to_deficit": dst['deficit_amount'],
+            "priority": priority,
+            "impact_score": round(min(100, (dst['utilization'] - src['utilization']) / 2 + transfer * 5), 1),
+            "reason": f"Transfer from {src['department']} (util: {src['utilization']}%) to {dst['department']} (util: {dst['utilization']}%) to balance budget utilization"
+        })
+
+    # Department utilization chart data
+    dept_chart = []
+    for _, row in dept_df.iterrows():
+        dept_chart.append({
+            "department": row['Department'],
+            "allocated": round(float(row['total_allocated']), 2),
+            "spent": round(float(row['total_spent']), 2),
+            "remaining": round(float(row['total_remaining']), 2),
+            "utilization": round(float(row['avg_utilization']), 1),
+        })
+
+    # State-wise surplus/deficit
+    state_chart = []
+    for _, row in state_df.iterrows():
+        state_chart.append({
+            "state": row['State'],
+            "allocated": round(float(row['total_allocated']), 2),
+            "spent": round(float(row['total_spent']), 2),
+            "remaining": round(float(row['total_remaining']), 2),
+            "utilization": round(float(row['avg_utilization']), 1),
+            "status": "Surplus" if row['avg_utilization'] < 70 else ("Balanced" if row['avg_utilization'] <= 100 else "Deficit"),
+        })
+
+    # Summary metrics
+    total_allocated = float(dept_df['total_allocated'].sum())
+    total_spent = float(dept_df['total_spent'].sum())
+    total_remaining = float(dept_df['total_remaining'].sum())
+    total_realloc_potential = sum(r['transfer_amount_cr'] for r in recommendations)
+    avg_utilization = float(dept_df['avg_utilization'].mean()) if len(dept_df) > 0 else 0
+
+    return {
+        "summary": {
+            "total_allocated_cr": round(total_allocated, 2),
+            "total_spent_cr": round(total_spent, 2),
+            "total_remaining_cr": round(total_remaining, 2),
+            "avg_utilization": round(avg_utilization, 1),
+            "total_reallocation_potential_cr": round(total_realloc_potential, 2),
+            "surplus_departments": len(surplus_depts),
+            "deficit_departments": len(deficit_depts),
+            "total_recommendations": len(recommendations),
+            "estimated_efficiency_gain": round(min(15, total_realloc_potential / max(total_allocated, 1) * 100), 1),
+        },
+        "recommendations": recommendations,
+        "surplus_departments": surplus_depts[:10],
+        "deficit_departments": deficit_depts[:10],
+        "department_chart": dept_chart,
+        "state_chart": state_chart,
+    }
+
+
 # Initialize auth DB on startup
 @app.on_event("startup")
 async def startup_event():
