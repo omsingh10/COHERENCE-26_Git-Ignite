@@ -4117,9 +4117,16 @@ class _BudgetGptScreenState extends State<BudgetGptScreen> {
                             size: 14,
                           ),
                           const SizedBox(width: 6),
-                          Text(
-                            s,
-                            style: const TextStyle(fontSize: 13, color: C.dark),
+                          Flexible(
+                            child: Text(
+                              s,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: C.dark,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 2,
+                            ),
                           ),
                         ],
                       ),
