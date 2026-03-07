@@ -47,7 +47,16 @@ const COLORS = {
   emerald: "#10b981",
 };
 
-const PIE_COLORS = ["#22c55e", "#3b82f6", "#f97316", "#ef4444", "#8b5cf6", "#14b8a6", "#f59e0b", "#ec4899"];
+const PIE_COLORS = [
+  "#25e66c",
+  "#3b82f6",
+  "#f97316",
+  "#ef4444",
+  "#8b5cf6",
+  "#14b8a6",
+  "#f59e0b",
+  "#ec4899",
+];
 
 const formatCr = (v) => {
   if (v >= 1000) return `${(v / 1000).toFixed(1)}K Cr`;
@@ -61,7 +70,9 @@ const PriorityBadge = ({ priority }) => {
     NORMAL: "bg-green-100 text-green-700 border-green-200",
   };
   return (
-    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${styles[priority] || styles.NORMAL}`}>
+    <span
+      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${styles[priority] || styles.NORMAL}`}
+    >
       {priority}
     </span>
   );
@@ -78,8 +89,14 @@ const KPICard = ({ icon: Icon, label, value, sub, color, trend }) => (
         <Icon size={20} className={`text-${color}-500`} />
       </div>
       {trend && (
-        <div className={`flex items-center gap-1 text-xs font-semibold ${trend > 0 ? "text-green-600" : "text-red-500"}`}>
-          {trend > 0 ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
+        <div
+          className={`flex items-center gap-1 text-xs font-semibold ${trend > 0 ? "text-green-600" : "text-red-500"}`}
+        >
+          {trend > 0 ? (
+            <ArrowUpRight size={14} />
+          ) : (
+            <ArrowDownRight size={14} />
+          )}
           {Math.abs(trend)}%
         </div>
       )}
@@ -96,9 +113,15 @@ const CustomTooltip = ({ active, payload, label }) => {
     <div className="bg-white border border-gray-200 rounded-xl p-3 shadow-lg text-xs">
       <p className="font-semibold text-gray-700 mb-1">{label}</p>
       {payload.map((p, i) => (
-        <p key={i} style={{ color: p.color }} className="flex justify-between gap-4">
+        <p
+          key={i}
+          style={{ color: p.color }}
+          className="flex justify-between gap-4"
+        >
           <span>{p.name}:</span>
-          <span className="font-bold">{typeof p.value === "number" ? formatCr(p.value) : p.value}</span>
+          <span className="font-bold">
+            {typeof p.value === "number" ? formatCr(p.value) : p.value}
+          </span>
         </p>
       ))}
     </div>
@@ -120,7 +143,7 @@ export default function SmartReallocationDashboard() {
         filters.year,
         filters.state,
         filters.district,
-        filters.department
+        filters.department,
       );
       setData(result);
     } catch (err) {
@@ -138,8 +161,13 @@ export default function SmartReallocationDashboard() {
     return (
       <div className="flex items-center justify-center h-96">
         <div className="text-center">
-          <RefreshCw className="animate-spin mx-auto mb-3 text-orange-500" size={32} />
-          <p className="text-gray-500 text-sm">Analyzing reallocation opportunities...</p>
+          <RefreshCw
+            className="animate-spin mx-auto mb-3 text-orange-500"
+            size={32}
+          />
+          <p className="text-gray-500 text-sm">
+            Analyzing reallocation opportunities...
+          </p>
         </div>
       </div>
     );
@@ -151,7 +179,10 @@ export default function SmartReallocationDashboard() {
         <div className="text-center bg-red-50 border border-red-200 rounded-2xl p-8">
           <AlertTriangle className="mx-auto mb-3 text-red-500" size={32} />
           <p className="text-red-700 font-medium">{error}</p>
-          <button onClick={fetchData} className="mt-3 px-4 py-2 bg-red-500 text-white rounded-xl text-sm hover:bg-red-600">
+          <button
+            onClick={fetchData}
+            className="mt-3 px-4 py-2 bg-red-500 text-white rounded-xl text-sm hover:bg-red-600"
+          >
             Retry
           </button>
         </div>
@@ -161,24 +192,45 @@ export default function SmartReallocationDashboard() {
 
   if (!data) return null;
 
-  const { summary, recommendations, surplus_departments, deficit_departments, department_chart, state_chart } = data;
+  const {
+    summary,
+    recommendations,
+    surplus_departments,
+    deficit_departments,
+    department_chart,
+    state_chart,
+  } = data;
 
   // Prepare utilization chart data sorted
-  const utilChart = [...department_chart].sort((a, b) => a.utilization - b.utilization);
+  const utilChart = [...department_chart].sort(
+    (a, b) => a.utilization - b.utilization,
+  );
 
   // State status distribution for pie
   const statusCounts = { Surplus: 0, Balanced: 0, Deficit: 0 };
-  state_chart.forEach((s) => { statusCounts[s.status] = (statusCounts[s.status] || 0) + 1; });
-  const statusPie = Object.entries(statusCounts).filter(([, v]) => v > 0).map(([name, value]) => ({ name, value }));
-  const STATUS_COLORS = { Surplus: "#22c55e", Balanced: "#3b82f6", Deficit: "#ef4444" };
+  state_chart.forEach((s) => {
+    statusCounts[s.status] = (statusCounts[s.status] || 0) + 1;
+  });
+  const statusPie = Object.entries(statusCounts)
+    .filter(([, v]) => v > 0)
+    .map(([name, value]) => ({ name, value }));
+  const STATUS_COLORS = {
+    Surplus: "#22c55e",
+    Balanced: "#3b82f6",
+    Deficit: "#ef4444",
+  };
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-800">Smart Reallocation</h1>
-          <p className="text-sm text-gray-500 mt-1">AI-powered fund redistribution recommendations from real budget data</p>
+          <h1 className="text-2xl font-bold text-gray-800">
+            Smart Reallocation
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            AI-powered fund redistribution recommendations from real budget data
+          </p>
         </div>
         <button
           onClick={fetchData}
@@ -238,8 +290,12 @@ export default function SmartReallocationDashboard() {
             <Lightbulb className="text-orange-500" size={20} />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-gray-800">Reallocation Recommendations</h2>
-            <p className="text-xs text-gray-400">Transfer funds from underutilized to overburdened departments</p>
+            <h2 className="text-base font-semibold text-gray-800">
+              Reallocation Recommendations
+            </h2>
+            <p className="text-xs text-gray-400">
+              Transfer funds from underutilized to overburdened departments
+            </p>
           </div>
         </div>
 
@@ -247,7 +303,9 @@ export default function SmartReallocationDashboard() {
           <div className="text-center py-8 text-gray-400">
             <CheckCircle2 size={40} className="mx-auto mb-2 text-green-400" />
             <p className="font-medium">All departments are well-balanced!</p>
-            <p className="text-xs mt-1">No reallocation needed with current filters.</p>
+            <p className="text-xs mt-1">
+              No reallocation needed with current filters.
+            </p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -261,21 +319,30 @@ export default function SmartReallocationDashboard() {
               >
                 <div
                   className="p-4 cursor-pointer bg-gradient-to-r from-green-50/40 via-white to-orange-50/40"
-                  onClick={() => setExpandedRec(expandedRec === rec.id ? null : rec.id)}
+                  onClick={() =>
+                    setExpandedRec(expandedRec === rec.id ? null : rec.id)
+                  }
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4 flex-1">
                       <div className="text-center">
-                        <p className="text-[10px] text-gray-400 uppercase font-semibold">#{rec.id}</p>
+                        <p className="text-[10px] text-gray-400 uppercase font-semibold">
+                          #{rec.id}
+                        </p>
                         <PriorityBadge priority={rec.priority} />
                       </div>
 
                       <div className="flex items-center gap-3 flex-1">
                         <div className="flex-1 min-w-0">
-                          <p className="text-[10px] text-gray-400 uppercase tracking-wider">From (Surplus)</p>
-                          <p className="font-bold text-green-700 text-sm truncate">{rec.from_department}</p>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider">
+                            From (Surplus)
+                          </p>
+                          <p className="font-bold text-green-700 text-sm truncate">
+                            {rec.from_department}
+                          </p>
                           <p className="text-[10px] text-gray-400">
-                            Util: {rec.from_utilization}% | Remaining: {formatCr(rec.from_remaining)}
+                            Util: {rec.from_utilization}% | Remaining:{" "}
+                            {formatCr(rec.from_remaining)}
                           </p>
                         </div>
 
@@ -284,10 +351,15 @@ export default function SmartReallocationDashboard() {
                         </div>
 
                         <div className="flex-1 min-w-0">
-                          <p className="text-[10px] text-gray-400 uppercase tracking-wider">To (Deficit)</p>
-                          <p className="font-bold text-orange-700 text-sm truncate">{rec.to_department}</p>
+                          <p className="text-[10px] text-gray-400 uppercase tracking-wider">
+                            To (Deficit)
+                          </p>
+                          <p className="font-bold text-orange-700 text-sm truncate">
+                            {rec.to_department}
+                          </p>
                           <p className="text-[10px] text-gray-400">
-                            Util: {rec.to_utilization}% | Deficit: {formatCr(rec.to_deficit)}
+                            Util: {rec.to_utilization}% | Deficit:{" "}
+                            {formatCr(rec.to_deficit)}
                           </p>
                         </div>
                       </div>
@@ -295,10 +367,18 @@ export default function SmartReallocationDashboard() {
 
                     <div className="ml-4 text-right flex items-center gap-3">
                       <div>
-                        <p className="text-[10px] text-gray-400 uppercase">Transfer</p>
-                        <p className="text-lg font-bold text-orange-600">{formatCr(rec.transfer_amount_cr)}</p>
+                        <p className="text-[10px] text-gray-400 uppercase">
+                          Transfer
+                        </p>
+                        <p className="text-lg font-bold text-orange-600">
+                          {formatCr(rec.transfer_amount_cr)}
+                        </p>
                       </div>
-                      {expandedRec === rec.id ? <ChevronUp size={16} className="text-gray-400" /> : <ChevronDown size={16} className="text-gray-400" />}
+                      {expandedRec === rec.id ? (
+                        <ChevronUp size={16} className="text-gray-400" />
+                      ) : (
+                        <ChevronDown size={16} className="text-gray-400" />
+                      )}
                     </div>
                   </div>
                 </div>
@@ -314,30 +394,54 @@ export default function SmartReallocationDashboard() {
                       <div className="px-4 pb-4 pt-2 border-t border-gray-100 bg-gray-50/50">
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                           <div className="bg-white rounded-lg p-3 border border-gray-100">
-                            <p className="text-[10px] text-gray-400 uppercase">Current Source Util.</p>
-                            <p className="text-lg font-bold text-green-600">{rec.from_utilization}%</p>
-                            <p className="text-[10px] text-gray-400">Projected: {rec.projected_from_util}%</p>
+                            <p className="text-[10px] text-gray-400 uppercase">
+                              Current Source Util.
+                            </p>
+                            <p className="text-lg font-bold text-green-600">
+                              {rec.from_utilization}%
+                            </p>
+                            <p className="text-[10px] text-gray-400">
+                              Projected: {rec.projected_from_util}%
+                            </p>
                           </div>
                           <div className="bg-white rounded-lg p-3 border border-gray-100">
-                            <p className="text-[10px] text-gray-400 uppercase">Current Dest Util.</p>
-                            <p className="text-lg font-bold text-orange-600">{rec.to_utilization}%</p>
-                            <p className="text-[10px] text-gray-400">Projected: {rec.projected_to_util}%</p>
+                            <p className="text-[10px] text-gray-400 uppercase">
+                              Current Dest Util.
+                            </p>
+                            <p className="text-lg font-bold text-orange-600">
+                              {rec.to_utilization}%
+                            </p>
+                            <p className="text-[10px] text-gray-400">
+                              Projected: {rec.projected_to_util}%
+                            </p>
                           </div>
                           <div className="bg-white rounded-lg p-3 border border-gray-100">
-                            <p className="text-[10px] text-gray-400 uppercase">Impact Score</p>
-                            <p className="text-lg font-bold text-purple-600">{rec.impact_score}</p>
-                            <p className="text-[10px] text-gray-400">out of 100</p>
+                            <p className="text-[10px] text-gray-400 uppercase">
+                              Impact Score
+                            </p>
+                            <p className="text-lg font-bold text-purple-600">
+                              {rec.impact_score}
+                            </p>
+                            <p className="text-[10px] text-gray-400">
+                              out of 100
+                            </p>
                           </div>
                           <div className="bg-white rounded-lg p-3 border border-gray-100">
-                            <p className="text-[10px] text-gray-400 uppercase">Rationale</p>
-                            <p className="text-xs text-gray-600 mt-1 leading-relaxed">{rec.reason}</p>
+                            <p className="text-[10px] text-gray-400 uppercase">
+                              Rationale
+                            </p>
+                            <p className="text-xs text-gray-600 mt-1 leading-relaxed">
+                              {rec.reason}
+                            </p>
                           </div>
                         </div>
 
                         {/* Before/After visualization */}
                         <div className="mt-3 grid grid-cols-2 gap-3">
                           <div className="bg-white rounded-lg p-3 border border-gray-100">
-                            <p className="text-[10px] text-gray-400 uppercase mb-2">Before Transfer</p>
+                            <p className="text-[10px] text-gray-400 uppercase mb-2">
+                              Before Transfer
+                            </p>
                             <div className="space-y-2">
                               <div>
                                 <div className="flex justify-between text-[10px] text-gray-500 mb-1">
@@ -347,7 +451,9 @@ export default function SmartReallocationDashboard() {
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div
                                     className="h-full bg-green-400 rounded-full"
-                                    style={{ width: `${Math.min(rec.from_utilization, 100)}%` }}
+                                    style={{
+                                      width: `${Math.min(rec.from_utilization, 100)}%`,
+                                    }}
                                   />
                                 </div>
                               </div>
@@ -359,14 +465,18 @@ export default function SmartReallocationDashboard() {
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div
                                     className="h-full bg-red-400 rounded-full"
-                                    style={{ width: `${Math.min(rec.to_utilization, 100)}%` }}
+                                    style={{
+                                      width: `${Math.min(rec.to_utilization, 100)}%`,
+                                    }}
                                   />
                                 </div>
                               </div>
                             </div>
                           </div>
                           <div className="bg-white rounded-lg p-3 border border-gray-100">
-                            <p className="text-[10px] text-gray-400 uppercase mb-2">After Transfer</p>
+                            <p className="text-[10px] text-gray-400 uppercase mb-2">
+                              After Transfer
+                            </p>
                             <div className="space-y-2">
                               <div>
                                 <div className="flex justify-between text-[10px] text-gray-500 mb-1">
@@ -376,7 +486,9 @@ export default function SmartReallocationDashboard() {
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div
                                     className="h-full bg-blue-400 rounded-full"
-                                    style={{ width: `${Math.min(rec.projected_from_util, 100)}%` }}
+                                    style={{
+                                      width: `${Math.min(rec.projected_from_util, 100)}%`,
+                                    }}
                                   />
                                 </div>
                               </div>
@@ -388,7 +500,9 @@ export default function SmartReallocationDashboard() {
                                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
                                   <div
                                     className="h-full bg-blue-400 rounded-full"
-                                    style={{ width: `${Math.min(rec.projected_to_util, 100)}%` }}
+                                    style={{
+                                      width: `${Math.min(rec.projected_to_util, 100)}%`,
+                                    }}
                                   />
                                 </div>
                               </div>
@@ -410,7 +524,8 @@ export default function SmartReallocationDashboard() {
             <div className="flex items-center justify-between">
               <p className="text-sm text-green-700">
                 <span className="font-semibold">Total Reallocation:</span>{" "}
-                {formatCr(summary.total_reallocation_potential_cr)} across {summary.total_recommendations} recommendations
+                {formatCr(summary.total_reallocation_potential_cr)} across{" "}
+                {summary.total_recommendations} recommendations
               </p>
               <p className="text-sm font-bold text-orange-600">
                 +{summary.estimated_efficiency_gain}% efficiency gain
@@ -429,11 +544,17 @@ export default function SmartReallocationDashboard() {
           transition={{ delay: 0.1 }}
           className="bg-white rounded-2xl border border-gray-100 p-6"
         >
-          <h3 className="text-sm font-semibold text-gray-800 mb-4">Department Utilization Overview</h3>
+          <h3 className="text-sm font-semibold text-gray-800 mb-4">
+            Department Utilization Overview
+          </h3>
           <ResponsiveContainer width="100%" height={320}>
             <ComposedChart data={utilChart} layout="vertical">
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-              <XAxis type="number" domain={[0, 'dataMax']} tick={{ fontSize: 11 }} />
+              <XAxis
+                type="number"
+                domain={[0, "dataMax"]}
+                tick={{ fontSize: 11 }}
+              />
               <YAxis
                 dataKey="department"
                 type="category"
@@ -441,8 +562,20 @@ export default function SmartReallocationDashboard() {
                 tick={{ fontSize: 10 }}
               />
               <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="spent" name="Spent" fill={COLORS.blue} radius={[0, 4, 4, 0]} barSize={14} />
-              <Bar dataKey="remaining" name="Remaining" fill={COLORS.amber} radius={[0, 4, 4, 0]} barSize={14} />
+              <Bar
+                dataKey="spent"
+                name="Spent"
+                fill={COLORS.blue}
+                radius={[0, 4, 4, 0]}
+                barSize={14}
+              />
+              <Bar
+                dataKey="remaining"
+                name="Remaining"
+                fill={COLORS.amber}
+                radius={[0, 4, 4, 0]}
+                barSize={14}
+              />
               <ReferenceLine x={0} stroke="#e5e7eb" />
             </ComposedChart>
           </ResponsiveContainer>
@@ -455,7 +588,9 @@ export default function SmartReallocationDashboard() {
           transition={{ delay: 0.15 }}
           className="bg-white rounded-2xl border border-gray-100 p-6"
         >
-          <h3 className="text-sm font-semibold text-gray-800 mb-4">State Budget Status Distribution</h3>
+          <h3 className="text-sm font-semibold text-gray-800 mb-4">
+            State Budget Status Distribution
+          </h3>
           <div className="grid grid-cols-2 gap-4">
             <ResponsiveContainer width="100%" height={280}>
               <PieChart>
@@ -479,12 +614,20 @@ export default function SmartReallocationDashboard() {
 
             <div className="flex flex-col justify-center space-y-3">
               {statusPie.map((s) => (
-                <div key={s.name} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                <div
+                  key={s.name}
+                  className="flex items-center justify-between p-2 bg-gray-50 rounded-lg"
+                >
                   <div className="flex items-center gap-2">
-                    <div className="w-3 h-3 rounded-full" style={{ backgroundColor: STATUS_COLORS[s.name] }} />
+                    <div
+                      className="w-3 h-3 rounded-full"
+                      style={{ backgroundColor: STATUS_COLORS[s.name] }}
+                    />
                     <span className="text-xs text-gray-600">{s.name}</span>
                   </div>
-                  <span className="text-sm font-bold text-gray-800">{s.value} states</span>
+                  <span className="text-sm font-bold text-gray-800">
+                    {s.value} states
+                  </span>
                 </div>
               ))}
             </div>
@@ -505,7 +648,9 @@ export default function SmartReallocationDashboard() {
             <div className="p-1.5 rounded-lg bg-green-50">
               <TrendingDown size={16} className="text-green-500" />
             </div>
-            <h3 className="text-sm font-semibold text-gray-800">Surplus Departments</h3>
+            <h3 className="text-sm font-semibold text-gray-800">
+              Surplus Departments
+            </h3>
             <span className="ml-auto text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">
               {surplus_departments.length} found
             </span>
@@ -522,10 +667,19 @@ export default function SmartReallocationDashboard() {
               </thead>
               <tbody>
                 {surplus_departments.map((d, i) => (
-                  <tr key={i} className="border-b border-gray-50 hover:bg-green-50/30">
-                    <td className="py-2.5 pr-3 font-medium text-gray-700">{d.department}</td>
-                    <td className="py-2.5 px-2 text-right text-gray-500">{formatCr(d.allocated)}</td>
-                    <td className="py-2.5 px-2 text-right font-semibold text-green-600">{formatCr(d.remaining)}</td>
+                  <tr
+                    key={i}
+                    className="border-b border-gray-50 hover:bg-green-50/30"
+                  >
+                    <td className="py-2.5 pr-3 font-medium text-gray-700">
+                      {d.department}
+                    </td>
+                    <td className="py-2.5 px-2 text-right text-gray-500">
+                      {formatCr(d.allocated)}
+                    </td>
+                    <td className="py-2.5 px-2 text-right font-semibold text-green-600">
+                      {formatCr(d.remaining)}
+                    </td>
                     <td className="py-2.5 pl-2 text-right">
                       <span className="bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-bold text-[10px]">
                         {d.utilization}%
@@ -549,7 +703,9 @@ export default function SmartReallocationDashboard() {
             <div className="p-1.5 rounded-lg bg-red-50">
               <TrendingUp size={16} className="text-red-500" />
             </div>
-            <h3 className="text-sm font-semibold text-gray-800">Deficit Departments</h3>
+            <h3 className="text-sm font-semibold text-gray-800">
+              Deficit Departments
+            </h3>
             <span className="ml-auto text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">
               {deficit_departments.length} found
             </span>
@@ -566,14 +722,27 @@ export default function SmartReallocationDashboard() {
               </thead>
               <tbody>
                 {deficit_departments.map((d, i) => (
-                  <tr key={i} className="border-b border-gray-50 hover:bg-red-50/30">
-                    <td className="py-2.5 pr-3 font-medium text-gray-700">{d.department}</td>
-                    <td className="py-2.5 px-2 text-right text-gray-500">{formatCr(d.allocated)}</td>
-                    <td className="py-2.5 px-2 text-right font-semibold text-red-600">{formatCr(d.deficit_amount)}</td>
+                  <tr
+                    key={i}
+                    className="border-b border-gray-50 hover:bg-red-50/30"
+                  >
+                    <td className="py-2.5 pr-3 font-medium text-gray-700">
+                      {d.department}
+                    </td>
+                    <td className="py-2.5 px-2 text-right text-gray-500">
+                      {formatCr(d.allocated)}
+                    </td>
+                    <td className="py-2.5 px-2 text-right font-semibold text-red-600">
+                      {formatCr(d.deficit_amount)}
+                    </td>
                     <td className="py-2.5 pl-2 text-right">
-                      <span className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
-                        d.utilization > 120 ? "bg-red-100 text-red-700" : "bg-amber-100 text-amber-700"
-                      }`}>
+                      <span
+                        className={`px-1.5 py-0.5 rounded font-bold text-[10px] ${
+                          d.utilization > 120
+                            ? "bg-red-100 text-red-700"
+                            : "bg-amber-100 text-amber-700"
+                        }`}
+                      >
                         {d.utilization}%
                       </span>
                     </td>
@@ -592,16 +761,36 @@ export default function SmartReallocationDashboard() {
         transition={{ delay: 0.3 }}
         className="bg-white rounded-2xl border border-gray-100 p-6"
       >
-        <h3 className="text-sm font-semibold text-gray-800 mb-4">State-wise Budget Allocation vs Spending</h3>
+        <h3 className="text-sm font-semibold text-gray-800 mb-4">
+          State-wise Budget Allocation vs Spending
+        </h3>
         <ResponsiveContainer width="100%" height={350}>
           <ComposedChart data={state_chart.slice(0, 15)}>
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-            <XAxis dataKey="state" tick={{ fontSize: 10 }} angle={-30} textAnchor="end" height={60} />
+            <XAxis
+              dataKey="state"
+              tick={{ fontSize: 10 }}
+              angle={-30}
+              textAnchor="end"
+              height={60}
+            />
             <YAxis tick={{ fontSize: 11 }} />
             <Tooltip content={<CustomTooltip />} />
             <Legend iconType="circle" wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="allocated" name="Allocated" fill={COLORS.blue} radius={[4, 4, 0, 0]} barSize={16} />
-            <Bar dataKey="spent" name="Spent" fill={COLORS.green} radius={[4, 4, 0, 0]} barSize={16} />
+            <Bar
+              dataKey="allocated"
+              name="Allocated"
+              fill={COLORS.blue}
+              radius={[4, 4, 0, 0]}
+              barSize={16}
+            />
+            <Bar
+              dataKey="spent"
+              name="Spent"
+              fill={COLORS.green}
+              radius={[4, 4, 0, 0]}
+              barSize={16}
+            />
             <Line
               dataKey="utilization"
               name="Utilization %"
@@ -610,7 +799,12 @@ export default function SmartReallocationDashboard() {
               dot={{ r: 3, fill: COLORS.orange }}
               yAxisId="right"
             />
-            <YAxis yAxisId="right" orientation="right" domain={[0, 150]} tick={{ fontSize: 11 }} />
+            <YAxis
+              yAxisId="right"
+              orientation="right"
+              domain={[0, 150]}
+              tick={{ fontSize: 11 }}
+            />
           </ComposedChart>
         </ResponsiveContainer>
       </motion.div>
