@@ -755,17 +755,11 @@ class DashboardScreen extends StatelessWidget {
                 padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                 child: Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: C.orange,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.account_balance,
-                        color: Colors.white,
-                        size: 18,
-                      ),
+                    Image.asset(
+                      'assets/logo.png',
+                      width: 36,
+                      height: 36,
+                      fit: BoxFit.contain,
                     ),
                     const SizedBox(width: 10),
                     Column(
@@ -776,7 +770,7 @@ class DashboardScreen extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
-                            color: C.dark,
+                            color: C.orange,
                           ),
                         ),
                         const Text(
@@ -1239,6 +1233,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   late TabController _tabCtrl;
   List<dynamic> states = [];
   List<dynamic> fundLapse = [];
+  List<dynamic> leakageItems = [];
   Map<String, dynamic> realloc = {
     'surplus_depts': [],
     'deficit_depts': [],
@@ -1249,7 +1244,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
   @override
   void initState() {
     super.initState();
-    _tabCtrl = TabController(length: 3, vsync: this);
+    _tabCtrl = TabController(length: 4, vsync: this);
     _load();
   }
 
@@ -1265,6 +1260,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
         http.get(Uri.parse('$kBaseUrl/api/states-summary')),
         http.get(Uri.parse('$kBaseUrl/api/fund-lapse-risk')),
         http.get(Uri.parse('$kBaseUrl/api/reallocation-suggestions')),
+        http.get(Uri.parse('$kBaseUrl/api/leakage-map')),
       ]);
       if (mounted) {
         setState(() {
@@ -1277,6 +1273,9 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
           if (results[2].statusCode == 200) {
             final d = json.decode(results[2].body);
             if (d is Map<String, dynamic>) realloc = d;
+          }
+          if (results[3].statusCode == 200) {
+            leakageItems = json.decode(results[3].body) as List;
           }
           loading = false;
         });
@@ -1302,6 +1301,8 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
             fontSize: 13,
             fontWeight: FontWeight.w600,
           ),
+          isScrollable: true,
+          tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(
               icon: Icon(Icons.bar_chart_rounded, size: 18),
@@ -1315,6 +1316,10 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
               icon: Icon(Icons.swap_horiz_rounded, size: 18),
               text: 'Reallocation',
             ),
+            Tab(
+              icon: Icon(Icons.water_drop_rounded, size: 18),
+              text: 'Leakage',
+            ),
           ],
         ),
       ),
@@ -1326,6 +1331,7 @@ class _AnalyticsScreenState extends State<AnalyticsScreen>
                 _UtilizationTab(states: states),
                 _FundLapseTab(items: fundLapse),
                 _ReallocationTab(data: realloc),
+                _LeakageMapTab(items: leakageItems),
               ],
             ),
     );
@@ -2101,6 +2107,206 @@ class _ReallocationTab extends StatelessWidget {
         ],
       ),
     ),
+  );
+}
+
+// ── Tab 4: Leakage Map ───────────────────────────────────────────────────────
+class _LeakageMapTab extends StatelessWidget {
+  final List<dynamic> items;
+  const _LeakageMapTab({required this.items});
+
+  Color _riskColor(double score) {
+    if (score >= 67) return C.danger;
+    if (score >= 34) return C.amber;
+    return C.success;
+  }
+
+  Color _riskBg(double score) {
+    if (score >= 67) return C.dangerLight;
+    if (score >= 34) return C.amberLight;
+    return C.successLight;
+  }
+
+  String _riskLabel(double score) {
+    if (score >= 67) return 'HIGH';
+    if (score >= 34) return 'MODERATE';
+    return 'LOW';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fmt = NumberFormat.compact(locale: 'en_IN');
+    if (items.isEmpty) {
+      return const Center(
+        child: Text('No leakage data', style: TextStyle(color: C.muted)),
+      );
+    }
+    // Summary counts
+    int highCount = 0, modCount = 0, lowCount = 0;
+    for (final d in items) {
+      final s = (d['risk_score'] as num? ?? 0).toDouble();
+      if (s >= 67) { highCount++; }
+      else if (s >= 34) { modCount++; }
+      else { lowCount++; }
+    }
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Legend row
+        wCard(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            children: [
+              _legendItem('HIGH', C.danger, highCount),
+              _legendItem('MODERATE', C.amber, modCount),
+              _legendItem('LOW', C.success, lowCount),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        ...items.map((d) {
+          final score = (d['risk_score'] as num? ?? 0).toDouble();
+          final rc = _riskColor(score);
+          final rb = _riskBg(score);
+          final label = _riskLabel(score);
+          final alloc = (d['allocated'] as num? ?? 0).toDouble();
+          final spent = (d['spent'] as num? ?? 0).toDouble();
+          final util = (d['utilization'] as num? ?? 0).toDouble();
+          final anomalyCount = (d['anomaly_count'] as num? ?? 0).toInt();
+          final totalProjects = (d['total_projects'] as num? ?? 1).toInt();
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: wCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              d['District'] ?? 'Unknown',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: C.dark,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              d['State'] ?? '',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: C.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            '${score.toInt()}',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w800,
+                              color: rc,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: rb,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: rc,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  // Risk bar
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: score / 100,
+                      backgroundColor: C.border,
+                      color: rc,
+                      minHeight: 5,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      _stat('Allocated', '${String.fromCharCode(8377)}${fmt.format(alloc)} Cr', C.orange),
+                      const SizedBox(width: 16),
+                      _stat('Spent', '${String.fromCharCode(8377)}${fmt.format(spent)} Cr', C.success),
+                      const SizedBox(width: 16),
+                      _stat('Util.', '${util.toStringAsFixed(1)}%', util < 70 ? C.danger : C.success),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, size: 14, color: C.danger),
+                      const SizedBox(width: 4),
+                      Text(
+                        '$anomalyCount anomalies / $totalProjects projects',
+                        style: const TextStyle(fontSize: 11, color: C.muted),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _legendItem(String label, Color color, int count) => Column(
+    children: [
+      Text(
+        '$count',
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: color,
+        ),
+      ),
+      Text(label, style: TextStyle(fontSize: 11, color: color)),
+    ],
+  );
+
+  Widget _stat(String l, String v, Color c) => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Text(l, style: const TextStyle(fontSize: 11, color: C.muted)),
+      Text(
+        v,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: c,
+        ),
+      ),
+    ],
   );
 }
 

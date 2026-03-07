@@ -52,6 +52,13 @@ const MONTH_NAMES = [
   "Dec",
 ];
 
+const formatCr = (v) => {
+  const n = Number(v) || 0;
+  if (n >= 100000) return `₹${(n / 100000).toFixed(1)}L Cr`;
+  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K Cr`;
+  return `₹${n.toFixed(0)} Cr`;
+};
+
 const PredictiveModelingDashboard = () => {
   const { year, state, district, department } = useFilterStore();
   const [data, setData] = useState(null);
@@ -229,7 +236,7 @@ const PredictiveModelingDashboard = () => {
         {[
           {
             label: "Total Allocation",
-            value: `₹${(summary.total_allocation / 100).toFixed(0)} Cr`,
+            value: formatCr(summary.total_allocation),
             color: "blue",
             icon: BarChart3,
           },
