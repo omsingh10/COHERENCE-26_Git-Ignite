@@ -55,9 +55,7 @@ const Sidebar = ({ onPageChange }) => {
               transition={{ duration: 0.2 }}
               className="flex items-center gap-2"
             >
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-md">
-                <span className="text-white font-extrabold text-sm">HK</span>
-              </div>
+              <img src="/logo.png" alt="Hisab Kitab" className="w-9 h-9 rounded-xl object-contain shadow-sm" onError={(e) => { e.target.style.display = 'none'; }} />
               <div>
                 <span className="font-extrabold text-lg tracking-tight text-gray-900">
                   HISAB
@@ -71,9 +69,7 @@ const Sidebar = ({ onPageChange }) => {
           )}
         </AnimatePresence>
         {!sidebarOpen && (
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center shadow-md mx-auto">
-            <span className="text-white font-extrabold text-sm">HK</span>
-          </div>
+          <img src="/logo.png" alt="Hisab Kitab" className="w-9 h-9 rounded-xl object-contain shadow-sm mx-auto" onError={(e) => { e.target.style.display = 'none'; }} />
         )}
         <button
           onClick={toggleSidebar}

@@ -124,13 +124,14 @@ export const BudgetFlowTrackerPage = ({ mockData }) => {
   const [cascadeData, setCascadeData] = useState(null);
   const [backendProjects, setBackendProjects] = useState([]);
   const [backendOnline, setBackendOnline] = useState(false);
+  const filters = useFilterStore();
 
   useEffect(() => {
     Promise.all([
-      api.getFlowKPIs(),
-      api.getFlowMonthlyEfficiency(),
-      api.getFlowCascade(),
-      api.getFlowProjects(10),
+      api.getFlowKPIs(filters.state, filters.year),
+      api.getFlowMonthlyEfficiency(filters.state, filters.year),
+      api.getFlowCascade(filters.state, filters.district, filters.year),
+      api.getFlowProjects(10, filters.state, filters.district, filters.year),
     ])
       .then(([kpis, monthly, cascade, proj]) => {
         setFlowKPIs(kpis);
@@ -140,7 +141,7 @@ export const BudgetFlowTrackerPage = ({ mockData }) => {
         setBackendOnline(true);
       })
       .catch(() => setBackendOnline(false));
-  }, []);
+  }, [filters.year, filters.state, filters.district, filters.department]);
 
   const data = usePageData(mockData);
   const stats = generateSummaryStats(data);
