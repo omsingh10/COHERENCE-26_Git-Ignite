@@ -128,6 +128,7 @@ export const BudgetGPT = ({ data }) => {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [chatHistory, setChatHistory] = useState([]);
 
   const sampleQueries = [
     "Which district wastes the most money?",
@@ -136,55 +137,33 @@ export const BudgetGPT = ({ data }) => {
     "Which state has lowest budget utilization?",
   ];
 
-  const handleQuery = (question) => {
+  const handleQuery = async (question) => {
+    if (!question.trim() || loading) return;
     setQuery(question);
     setLoading(true);
-
-    setTimeout(() => {
-      if (question.includes("wastes")) {
-        const topWasters = getTopDistricts(data, "anomaly", 3);
-        setResults({
-          query: question,
-          answer: topWasters
-            .map(
-              (d) =>
-                `${d.district} in ${d.state} with ${d.anomalyCount} anomalies`,
-            )
-            .join(", "),
-          data: topWasters,
-        });
-      } else if (question.includes("overspending")) {
-        const topOverspenders = data
-          .filter((d) => d.utilization_rate > 100)
-          .sort((a, b) => b.utilization_rate - a.utilization_rate)
-          .slice(0, 3);
-        setResults({
-          query: question,
-          answer: `${topOverspenders[0]?.department} in ${topOverspenders[0]?.district} has the highest overspending at ${topOverspenders[0]?.utilization_rate}%`,
-          data: topOverspenders,
-        });
-      } else if (question.includes("corruption") || question.includes("risk")) {
-        const highRisk = getTopDistricts(data, "risk", 3);
-        setResults({
-          query: question,
-          answer: highRisk
-            .map((d) => `${d.district} (Risk Score: ${d.riskScore})`)
-            .join(", "),
-          data: highRisk,
-        });
-      } else if (question.includes("utilization")) {
-        const lowUtilization = data
-          .filter((d) => d.utilization_rate < 50)
-          .sort((a, b) => a.utilization_rate - b.utilization_rate)
-          .slice(0, 3);
-        setResults({
-          query: question,
-          answer: `${lowUtilization[0]?.state} shows the most underutilization with only ${lowUtilization[0]?.utilization_rate}% budget used`,
-          data: lowUtilization,
-        });
-      }
+    setResults(null);
+    try {
+      const res = await fetch("http://localhost:8000/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: question, history: chatHistory }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const { reply } = await res.json();
+      setResults({ query: question, answer: reply || "No response." });
+      setChatHistory((prev) => [
+        ...prev,
+        { role: "user", text: question },
+        { role: "model", text: reply },
+      ]);
+    } catch (err) {
+      setResults({
+        query: question,
+        answer: "⚠️ Could not reach Budget AI. Make sure the backend is running on port 8000.",
+      });
+    } finally {
       setLoading(false);
-    }, 800);
+    }
   };
 
   return (
@@ -251,35 +230,10 @@ export const BudgetGPT = ({ data }) => {
             <span className="font-semibold text-gray-700">Query:</span>{" "}
             {results.query}
           </p>
-          <p className="text-sm text-gray-800 mb-3">
+          <p className="text-sm text-gray-800 mb-1">
             <span className="font-semibold text-orange-600">Answer:</span>{" "}
             {results.answer}
           </p>
-          {results.data && (
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-              {results.data.slice(0, 3).map((item, idx) => (
-                <div
-                  key={idx}
-                  className="bg-orange-50/50 p-3 rounded-xl text-xs border border-orange-100"
-                >
-                  <p className="font-semibold text-gray-800">
-                    {item.district || item.department}
-                  </p>
-                  <p className="text-gray-500 mt-0.5">{item.state}</p>
-                  {item.riskScore && (
-                    <p className="text-red-500 font-semibold mt-1">
-                      Risk: {item.riskScore}
-                    </p>
-                  )}
-                  {item.utilization_rate && (
-                    <p className="text-green-600 mt-0.5">
-                      Util: {item.utilization_rate}%
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
         </motion.div>
       )}
     </motion.div>
