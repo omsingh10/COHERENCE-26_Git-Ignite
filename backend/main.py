@@ -365,13 +365,12 @@ async def department_summary(
     
     return JSONResponse(content=df_to_json(df))
 
-# 7a. ALL ANOMALIES LIST (Auth required) — must be defined BEFORE /{department}
+# 7a. ALL ANOMALIES LIST — must be defined BEFORE /{department}
 @app.get("/api/anomalies/list")
 async def anomalies_list(
     limit: int = 50,
-    current_user: User = Depends(get_current_active_user)
 ):
-    """Get all anomaly-tagged records with risk classification - Auth required"""
+    """Get all anomaly-tagged records with risk classification"""
     conn = sqlite3.connect(DB_PATH)
 
     counts_df = pd.read_sql("""

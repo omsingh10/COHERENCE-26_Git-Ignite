@@ -62,8 +62,22 @@ const Header = ({ mockData }) => {
     >
       <div className="px-6 py-3">
         <div className="flex items-center justify-between gap-4 flex-wrap">
+          {/* App Logo + Name */}
+          <div className="flex items-center gap-2.5 shrink-0">
+            <img
+              src="/logo.png"
+              alt="Hisab Kitab"
+              className="w-9 h-9 rounded-xl object-contain shadow-sm"
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+            <div className="hidden sm:block">
+              <span className="font-extrabold text-base tracking-tight text-gray-900">HISAB</span>
+              <span className="font-extrabold text-base tracking-tight text-orange-500"> KITAB</span>
+            </div>
+          </div>
+
           {/* Search Bar */}
-          <div className="flex-1 min-w-64 relative">
+          <div className="flex-1 min-w-48 relative">
             <input
               type="text"
               placeholder="Search departments, districts..."
