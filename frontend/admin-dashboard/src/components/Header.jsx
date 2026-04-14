@@ -70,10 +70,6 @@ const Header = ({ mockData }) => {
               className="w-9 h-9 rounded-xl object-contain shadow-sm"
               onError={(e) => { e.target.style.display = 'none'; }}
             />
-            <div className="hidden sm:block">
-              <span className="font-extrabold text-base tracking-tight text-gray-900">HISAB</span>
-              <span className="font-extrabold text-base tracking-tight text-orange-500"> KITAB</span>
-            </div>
           </div>
 
           {/* Search Bar */}

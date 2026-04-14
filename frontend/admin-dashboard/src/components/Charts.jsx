@@ -144,12 +144,22 @@ export const MonthlySpendinTrendChart = ({ data }) => {
 };
 
 export const SpendingEfficiencyChart = ({ data }) => {
-  const chartData = data.slice(0, 10).map((record) => ({
-    name: record.district.substring(0, 8),
-    efficiency: Math.min(record.utilization_rate, 120),
-    allocated: record.allocated_budget,
-    spent: record.spent_budget,
-  }));
+  const districtMap = {};
+  data.forEach((record) => {
+    const d = record.district;
+    if (!districtMap[d]) districtMap[d] = { allocated: 0, spent: 0 };
+    districtMap[d].allocated += record.allocated_budget || 0;
+    districtMap[d].spent += record.spent_budget || 0;
+  });
+  const chartData = Object.entries(districtMap)
+    .map(([name, { allocated, spent }]) => ({
+      name: name.substring(0, 8),
+      efficiency: allocated > 0 ? Math.min(Math.round((spent / allocated) * 100), 120) : 0,
+      allocated,
+      spent,
+    }))
+    .sort((a, b) => b.efficiency - a.efficiency)
+    .slice(0, 10);
 
   return (
     <ChartCard title="Spending Efficiency by District">
